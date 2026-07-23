@@ -1,4 +1,5 @@
-import json
+import csv
+import io
 import urllib.request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -17,13 +18,13 @@ TOKEN = "8624453473:AAGruXbUjMfE9w7iVZ7J3ciWtG6wc5oZm_M"
 
 
 # ==========================================
-# Google Drive Seat Data Direct URLs
+# Google Drive Seat Direct Confirmation Link Logic (CSV Export)
 # ==========================================
 SEAT_URLS = {
-    "seat_1": "https://drive.google.com/uc?export=download&id=1kfwzt0TTFE2RUHq2VDEc9dM3IoEw8ANW",
-    "seat_2": "https://drive.google.com/uc?export=download&id=15P8j9bU2-25YctdJmRC5MMBOUaGo5d-Y",
-    "seat_3": "https://drive.google.com/uc?export=download&id=1zzcfwzkMUfNLq5Ok5NZKbaPGlP34RnQb",
-    "seat_4": "https://drive.google.com/uc?export=download&id=1CkaoqLOoO3NORHSOIqoU3mAclLiewlBA",
+    "seat_1": "https://drive.google.com/uc?export=download&confirm=t&id=1kfwzt0TTFE2RUHq2VDEc9dM3IoEw8ANW",
+    "seat_2": "https://drive.google.com/uc?export=download&confirm=t&id=15P8j9bU2-25YctdJmRC5MMBOUaGo5d-Y",
+    "seat_3": "https://drive.google.com/uc?export=download&confirm=t&id=1zzcfwzkMUfNLq5Ok5NZKbaPGlP34RnQb",
+    "seat_4": "https://drive.google.com/uc?export=download&confirm=t&id=1CkaoqLOoO3NORHSOIqoU3mAclLiewlBA",
 }
 
 SEAT_NAMES = {
@@ -33,25 +34,45 @@ SEAT_NAMES = {
     "seat_4": "লক্ষ্মীপুর-৪",
 }
 
-# Global Data Cache
 DRIVE_DATA_CACHE = {}
 
 
 def load_drive_data():
-    """Download and load JSON data from Google Drive URLs"""
+    """Download and load CSV data from Google Drive URLs"""
     global DRIVE_DATA_CACHE
-    print("⏳ গুগল ড্রাইভ থেকে ৪টি আসনের ডেটা লোড করা হচ্ছে...")
+    print("⏳ গুগল ড্রাইভ থেকে ৪টি আসনের CSV ডেটা লোড করা হচ্ছে...")
+
     for seat_key, url in SEAT_URLS.items():
         try:
             req = urllib.request.Request(
-                url, headers={"User-Agent": "Mozilla/5.0"}
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                },
             )
             with urllib.request.urlopen(req) as response:
-                content = response.read().decode("utf-8")
-                DRIVE_DATA_CACHE[seat_key] = json.loads(content)
-                print(f"✅ {SEAT_NAMES[seat_key]} ডেটা সফলভাবে লোড হয়েছে।")
+                content = response.read().decode("utf-8-sig", errors="ignore")
+
+                # Parse CSV content using DictReader
+                csv_file = io.StringIO(content)
+                reader = csv.DictReader(csv_file)
+
+                data_list = []
+                for row in reader:
+                    # Clean dictionary keys and values
+                    cleaned_row = {
+                        str(k).strip(): str(v).strip()
+                        for k, v in row.items()
+                        if k is not None
+                    }
+                    data_list.append(cleaned_row)
+
+                DRIVE_DATA_CACHE[seat_key] = data_list
+                print(
+                    f"✅ {SEAT_NAMES[seat_key]} CSV ডেটা লোড হয়েছে ({len(data_list)} টি সারি)।"
+                )
         except Exception as e:
-            print(f"❌ {SEAT_NAMES[seat_key]} লোড করতে সমস্যা: {e}")
+            print(f"❌ {SEAT_NAMES[seat_key]} CSV লোড করতে সমস্যা: {e}")
             DRIVE_DATA_CACHE[seat_key] = []
 
 
@@ -72,8 +93,8 @@ def main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🤖 Advanced Search Bot\n\n"
-        "গুগল ড্রাইভ ডেটাবেজ যুক্ত করা হয়েছে।\n\n"
+        "🤖 CSV Search Bot\n\n"
+        "গুগল ড্রাইভের CSV ডেটাবেজ যুক্ত করা হয়েছে।\n\n"
         "📍 বিভাগ নির্বাচন করুন:",
         reply_markup=main_menu(),
     )
@@ -186,50 +207,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Home
     elif data == "home":
         context.user_data.clear()
-        await query.edit_message_text(
-            "🏠 মূল মেনু:", reply_markup=main_menu()
-        )
+        await query.edit_message_text("🏠 মূল মেনু:", reply_markup=main_menu())
 
     # About
     elif data == "about":
         await query.edit_message_text(
             "ℹ️ Search Bot\n\n"
-            "গুগল ড্রাইভে থাকা ৪টি আসনের ডেটাবেজ সাপোর্ট করে।"
+            "গুগল ড্রাইভে থাকা ৪টি আসনের CSV ফাইল থেকে তথ্য খোঁজা হয়।"
         )
 
 
 # ==========================================
-# Search Logic Handler
+# Dynamic CSV Search Logic
 # ==========================================
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("waiting_search"):
         return
 
-    value = update.message.text.strip()
+    value = update.message.text.strip().lower()
     search_type = context.user_data.get("search_type")
-    selected_seat = context.user_data.get("seat")  # seat_1, seat_2, etc.
+    selected_seat = context.user_data.get("seat")
 
-    field_map = {
-        "id": ["id", "nid", "voter_id", "code"],
-        "dob": ["dob", "date_of_birth"],
-        "name": ["name", "voter_name"],
-        "father": ["father", "father_name"],
-        "mother": ["mother", "mother_name"],
-    }
-
-    possible_fields = field_map.get(search_type, [search_type])
-
-    # Get data from Google Drive Cache for the selected seat
     seat_data = DRIVE_DATA_CACHE.get(selected_seat, [])
 
     results = []
+
     for person in seat_data:
         matched = False
-        for field in possible_fields:
-            if field in person and person[field]:
-                if value.lower() in str(person[field]).lower():
-                    matched = True
-                    break
+
+        # Search across all column values of CSV
+        for col_name, val in person.items():
+            if val and value in str(val).lower():
+                matched = True
+                break
+
         if matched:
             results.append(person)
 
@@ -245,31 +256,23 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🏠 মূল মেনু", callback_data="home")],
         ]
         await update.message.reply_text(
-            "❌ ড্রাইভ ডেটাবেজে কোনো তথ্য পাওয়া যায়নি।",
+            "❌ ড্রাইভের CSV ফাইলে কোনো তথ্য পাওয়া যায়নি।\n\n"
+            "💡 অনুগ্রহ করে সঠিক নাম, ID বা তারিখ দিয়ে পুনরায় চেষ্টা করুন।",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
         return
 
     await update.message.reply_text(f"🔎 মোট ফলাফল পাওয়া গেছে: {len(results)}")
 
-    # Display Top 10 Results
+    # Display Top 10 Results dynamically based on CSV Header Columns
     for person in results[:10]:
-        report = (
-            f"🪪 {person.get('name', person.get('voter_name', 'N/A'))}\n"
-            "────────────────────\n"
-            f"🔢 ID / NID: {person.get('id', person.get('nid', 'N/A'))}\n"
-            f"🔖 সিরিয়াল: {person.get('serial', 'N/A')}\n"
-            f"👨 পিতা: {person.get('father', person.get('father_name', 'N/A'))}\n"
-            f"👩 মাতা: {person.get('mother', person.get('mother_name', 'N/A'))}\n"
-            f"🎂 জন্ম: {person.get('dob', person.get('date_of_birth', 'N/A'))}\n"
-            f"⚧ লিঙ্গ: {person.get('gender', 'N/A')}\n"
-            f"💼 পেশা: {person.get('profession', 'N/A')}\n"
-            f"🏠 ঠিকানা: {person.get('address', 'N/A')}\n"
-            f"📍 থানা: {person.get('thana', 'N/A')}\n"
-            f"🗺 জেলা: {person.get('district', 'N/A')}  ·  বিভাগ: {person.get('division', 'N/A')}\n"
-            f"🏛 আসন: {person.get('seat', SEAT_NAMES.get(selected_seat, 'N/A'))}  ·  কোড: {person.get('code', 'N/A')}"
-        )
-        await update.message.reply_text(report)
+        report_lines = []
+        for col, val in person.items():
+            if val:  # Only add non-empty values
+                report_lines.append(f"• **{col}**: {val}")
+
+        report_text = "\n".join(report_lines)
+        await update.message.reply_text(report_text, parse_mode="Markdown")
 
     keyboard = [
         [
@@ -286,10 +289,9 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==========================================
-# Main Application
+# Main Execution
 # ==========================================
 def main():
-    # Load Google Drive data on startup
     load_drive_data()
 
     app = Application.builder().token(TOKEN).build()
@@ -300,7 +302,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler)
     )
 
-    print("🤖 Advanced Google Drive Search Bot চালু হয়েছে!")
+    print("🤖 CSV Search Bot চালু হয়েছে!")
     app.run_polling()
 
 
