@@ -23,7 +23,7 @@ from telegram.ext import (
 
 
 # =====================================================
-# 1. এখানে আপনার Telegram Bot Token বসান
+# 1. Telegram Bot Token
 # =====================================================
 
 TOKEN = "8757771538:AAFt6VmtbOkFJ_0QSxpAWW8cVX8VwTUfC_E"
@@ -169,7 +169,8 @@ def find_csv_in_zip(
 
 
 # =====================================================
-# 6. নির্দিষ্ট কলামে CSV Search
+# 6. CSV Search
+# সব Matching Result বের করবে
 # =====================================================
 
 def search_zip(
@@ -232,7 +233,7 @@ def search_zip(
                 for row in reader:
 
                     # =================================
-                    # Demo ID Search
+                    # কোন কলামে সার্চ হবে
                     # =================================
 
                     if search_type == "demo_id":
@@ -246,10 +247,6 @@ def search_zip(
                         ]
 
 
-                    # =================================
-                    # Name Search
-                    # =================================
-
                     elif search_type == "name":
 
                         search_columns = [
@@ -260,10 +257,6 @@ def search_zip(
 
                         ]
 
-
-                    # =================================
-                    # Father Search
-                    # =================================
 
                     elif search_type == "father":
 
@@ -276,10 +269,6 @@ def search_zip(
                         ]
 
 
-                    # =================================
-                    # Mother Search
-                    # =================================
-
                     elif search_type == "mother":
 
                         search_columns = [
@@ -290,10 +279,6 @@ def search_zip(
 
                         ]
 
-
-                    # =================================
-                    # Date of Birth Search
-                    # =================================
 
                     elif search_type == "dob":
 
@@ -326,7 +311,7 @@ def search_zip(
 
 
                     # =================================
-                    # নির্দিষ্ট কলাম থেকে Value নেওয়া
+                    # Search Value
                     # =================================
 
                     found_value = ""
@@ -342,41 +327,115 @@ def search_zip(
                         if column_name in normalized_row:
 
                             found_value = normalized_row[
+
                                 column_name
+
                             ]
 
                             break
 
 
                     # =================================
-                    # Search Match
+                    # জন্মতারিখ Search
+                    #
+                    # 01/01/2000
+                    # 01-01-2000
+                    # 2000-01-01
+                    #
+                    # সব Format মিলানোর চেষ্টা
+                    # =================================
+
+                    if search_type == "dob":
+
+                        search_value = (
+
+                            search_text
+
+                            .strip()
+
+                            .replace(
+                                "-",
+                                "/"
+                            )
+
+                            .replace(
+                                ".",
+                                "/"
+                            )
+
+                        )
+
+
+                        found_value_normalized = (
+
+                            found_value
+
+                            .strip()
+
+                            .replace(
+                                "-",
+                                "/"
+                            )
+
+                            .replace(
+                                ".",
+                                "/"
+                            )
+
+                        )
+
+
+                    else:
+
+                        search_value = (
+
+                            search_text
+
+                            .strip()
+
+                            .lower()
+
+                        )
+
+
+                        found_value_normalized = (
+
+                            found_value
+
+                            .strip()
+
+                            .lower()
+
+                        )
+
+
+                    # =================================
+                    # Match Check
                     # =================================
 
                     if (
 
-                        search_text.lower()
+                        search_value
 
-                        in found_value.lower()
+                        in found_value_normalized
 
                     ):
 
                         results.append(
+
                             dict(row)
+
                         )
-
-
-                        # সর্বোচ্চ ১০টি ফলাফল
-
-                        if len(results) >= 10:
-
-                            break
 
 
     except Exception as e:
 
         print(
+
             "CSV Search Error:",
+
             e
+
         )
 
 
@@ -413,7 +472,9 @@ def get_value(
         if value:
 
             return str(
+
                 value
+
             ).strip()
 
 
@@ -624,15 +685,140 @@ def make_report(
 
 
 # =====================================================
-# 9. /start
+# 9. Search Menu
+# =====================================================
+
+async def show_search_menu(
+
+    query,
+
+    context
+
+):
+
+    seat = context.user_data.get(
+
+        "seat",
+
+        "seat_1"
+
+    )
+
+
+    seat_name = SEAT_FILES[seat][
+
+        "name"
+
+    ]
+
+
+    keyboard = [
+
+        [
+
+            InlineKeyboardButton(
+
+                "🆔 Demo ID",
+
+                callback_data="search_demo_id"
+
+            ),
+
+            InlineKeyboardButton(
+
+                "👤 Demo নাম",
+
+                callback_data="search_name"
+
+            ),
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
+                "👨 Demo পিতার নাম",
+
+                callback_data="search_father"
+
+            ),
+
+            InlineKeyboardButton(
+
+                "👩 Demo মাতার নাম",
+
+                callback_data="search_mother"
+
+            ),
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
+                "🎂 Demo জন্মতারিখ",
+
+                callback_data="search_dob"
+
+            ),
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
+                "🏠 আসন পরিবর্তন",
+
+                callback_data="change_seat"
+
+            ),
+
+        ],
+
+    ]
+
+
+    await query.edit_message_text(
+
+        f"🏠 Demo Search Bot\n\n"
+
+        f"📍 নির্বাচিত: {seat_name}\n\n"
+
+        "🆔 Demo ID দিয়ে সার্চ\n"
+
+        "👤 Demo নাম দিয়ে সার্চ\n"
+
+        "👨 Demo পিতার নাম দিয়ে সার্চ\n"
+
+        "👩 Demo মাতার নাম দিয়ে সার্চ\n"
+
+        "🎂 Demo জন্মতারিখ দিয়ে সার্চ\n\n"
+
+        "👇 নিচের বাটন থেকে সার্চের ধরন নির্বাচন করুন:",
+
+        reply_markup=InlineKeyboardMarkup(
+
+            keyboard
+
+        )
+
+    )
+
+
+# =====================================================
+# 10. /start
 # =====================================================
 
 async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
 
-    # আগের নির্বাচন Reset
+    update: Update,
+
+    context: ContextTypes.DEFAULT_TYPE
+
+):
 
     context.user_data.clear()
 
@@ -698,10 +884,10 @@ async def start(
 
 
 # =====================================================
-# 10. Search Type Buttons
+# 11. রিপোর্ট দেখানো
 # =====================================================
 
-async def show_search_buttons(
+async def send_results(
 
     query,
 
@@ -709,78 +895,145 @@ async def show_search_buttons(
 
 ):
 
-    keyboard = [
+    results = context.user_data.get(
 
-        [
+        "results",
 
-            InlineKeyboardButton(
+        []
 
-                "🆔 Demo ID",
+    )
 
-                callback_data="search_demo_id"
 
-            ),
+    current_page = context.user_data.get(
 
-            InlineKeyboardButton(
+        "page",
 
-                "👤 Demo নাম",
+        0
 
-                callback_data="search_name"
+    )
 
-            ),
 
-        ],
+    seat = context.user_data.get(
 
-        [
+        "seat",
 
-            InlineKeyboardButton(
+        "seat_1"
 
-                "👨 Demo পিতার নাম",
+    )
 
-                callback_data="search_father"
 
-            ),
+    # প্রতি পেজে ১০টি
 
-            InlineKeyboardButton(
+    per_page = 10
 
-                "👩 Demo মাতার নাম",
 
-                callback_data="search_mother"
+    start_index = (
 
-            ),
+        current_page
 
-        ],
+        * per_page
 
-        [
+    )
 
-            InlineKeyboardButton(
 
-                "🎂 Demo জন্মতারিখ",
+    end_index = (
 
-                callback_data="search_dob"
+        start_index
 
-            ),
+        + per_page
 
-        ],
+    )
+
+
+    page_results = results[
+
+        start_index:end_index
 
     ]
 
 
-    await query.edit_message_text(
+    # ==========================================
+    # রিপোর্ট পাঠানো
+    # ==========================================
 
-        "🏠 Demo Search Bot\n\n"
+    for row in page_results:
 
-        "🆔 Demo ID দিয়ে সার্চ\n"
+        report = make_report(
 
-        "👤 Demo নাম দিয়ে সার্চ\n"
+            row,
 
-        "👨 Demo পিতার নাম দিয়ে সার্চ\n"
+            SEAT_FILES[seat][
 
-        "👩 Demo মাতার নাম দিয়ে সার্চ\n"
+                "name"
 
-        "🎂 Demo জন্মতারিখ দিয়ে সার্চ\n\n"
+            ]
 
-        "👇 নিচের বাটন থেকে সার্চের ধরন নির্বাচন করুন:",
+        )
+
+
+        await query.message.reply_text(
+
+            report
+
+        )
+
+
+    # ==========================================
+    # Pagination Buttons
+    # ==========================================
+
+    keyboard = []
+
+
+    # আরো রিপোর্ট আছে কিনা
+
+    if end_index < len(results):
+
+        keyboard.append(
+
+            [
+
+                InlineKeyboardButton(
+
+                    "➡️ আরো দেখুন",
+
+                    callback_data="next_page"
+
+                )
+
+            ]
+
+        )
+
+
+    # Search Menu
+
+    keyboard.append(
+
+        [
+
+            InlineKeyboardButton(
+
+                "🔎 নতুন সার্চ",
+
+                callback_data="back_search_menu"
+
+            )
+
+        ]
+
+    )
+
+
+    await query.message.reply_text(
+
+        f"📄 মোট ফলাফল: {len(results)} টি\n"
+
+        f"📑 দেখানো হয়েছে: "
+
+        f"{start_index + 1} - "
+
+        f"{min(end_index, len(results))}",
 
         reply_markup=InlineKeyboardMarkup(
 
@@ -792,7 +1045,7 @@ async def show_search_buttons(
 
 
 # =====================================================
-# 11. Button Handler
+# 12. Button Handler
 # =====================================================
 
 async def button_handler(
@@ -825,7 +1078,159 @@ async def button_handler(
         ] = data
 
 
-        await show_search_buttons(
+        context.user_data.pop(
+
+            "search_type",
+
+            None
+
+        )
+
+
+        await show_search_menu(
+
+            query,
+
+            context
+
+        )
+
+
+        return
+
+
+    # ==========================================
+    # Change Seat
+    # ==========================================
+
+    if data == "change_seat":
+
+        keyboard = [
+
+            [
+
+                InlineKeyboardButton(
+
+                    "🏛 আসন-১",
+
+                    callback_data="seat_1"
+
+                ),
+
+                InlineKeyboardButton(
+
+                    "🏛 আসন-২",
+
+                    callback_data="seat_2"
+
+                ),
+
+            ],
+
+            [
+
+                InlineKeyboardButton(
+
+                    "🏛 আসন-৩",
+
+                    callback_data="seat_3"
+
+                ),
+
+                InlineKeyboardButton(
+
+                    "🏛 আসন-৪",
+
+                    callback_data="seat_4"
+
+                ),
+
+            ],
+
+        ]
+
+
+        await query.edit_message_text(
+
+            "📍 একটি আসন নির্বাচন করুন:",
+
+            reply_markup=InlineKeyboardMarkup(
+
+                keyboard
+
+            )
+
+        )
+
+
+        return
+
+
+    # ==========================================
+    # Back to Search Menu
+    # ==========================================
+
+    if data == "back_search_menu":
+
+        context.user_data.pop(
+
+            "results",
+
+            None
+
+        )
+
+
+        context.user_data.pop(
+
+            "page",
+
+            None
+
+        )
+
+
+        context.user_data.pop(
+
+            "search_type",
+
+            None
+
+        )
+
+
+        await show_search_menu(
+
+            query,
+
+            context
+
+        )
+
+
+        return
+
+
+    # ==========================================
+    # Next Page
+    # ==========================================
+
+    if data == "next_page":
+
+        context.user_data[
+
+            "page"
+
+        ] = context.user_data.get(
+
+            "page",
+
+            0
+
+        ) + 1
+
+
+        await send_results(
 
             query,
 
@@ -847,7 +1252,9 @@ async def button_handler(
 
             "type": "demo_id",
 
-            "title": "🆔 Demo ID"
+            "title": "🆔 Demo ID",
+
+            "example": ""
 
         },
 
@@ -855,7 +1262,9 @@ async def button_handler(
 
             "type": "name",
 
-            "title": "👤 Demo নাম"
+            "title": "👤 Demo নাম",
+
+            "example": ""
 
         },
 
@@ -863,7 +1272,9 @@ async def button_handler(
 
             "type": "father",
 
-            "title": "👨 Demo পিতার নাম"
+            "title": "👨 Demo পিতার নাম",
+
+            "example": ""
 
         },
 
@@ -871,7 +1282,9 @@ async def button_handler(
 
             "type": "mother",
 
-            "title": "👩 Demo মাতার নাম"
+            "title": "👩 Demo মাতার নাম",
+
+            "example": ""
 
         },
 
@@ -879,7 +1292,9 @@ async def button_handler(
 
             "type": "dob",
 
-            "title": "🎂 Demo জন্মতারিখ"
+            "title": "🎂 Demo জন্মতারিখ",
+
+            "example": "01/01/2000"
 
         },
 
@@ -906,19 +1321,49 @@ async def button_handler(
         ]
 
 
+        if search_info["type"] == "dob":
+
+            message_text = (
+
+                "✅ 🎂 Demo জন্মতারিখ দিয়ে "
+
+                "সার্চ নির্বাচন করা হয়েছে।\n\n"
+
+                "✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n"
+
+                "📌 উদাহরণ: "
+
+                "`01/01/2000`"
+
+            )
+
+
+        else:
+
+            message_text = (
+
+                f"✅ {search_info['title']} "
+
+                f"দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n"
+
+                f"✏️ এখন আপনার "
+
+                f"{search_info['title']} লিখে পাঠান।"
+
+            )
+
+
         await query.edit_message_text(
 
-            f"✅ {search_info['title']} "
-            f"দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n"
+            message_text,
 
-            f"✏️ এখন আপনার "
-            f"{search_info['title']} লিখে পাঠান।"
+            parse_mode="Markdown"
 
         )
 
 
 # =====================================================
-# 12. Search Handler
+# 13. Search Handler
 # =====================================================
 
 async def search_handler(
@@ -954,11 +1399,7 @@ async def search_handler(
 
         await update.message.reply_text(
 
-            "⚠️ প্রথমে /start লিখে "
-
-            "আসন নির্বাচন করুন এবং "
-
-            "সার্চের ধরন নির্বাচন করুন।"
+            "⚠️ প্রথমে সার্চের ধরন নির্বাচন করুন।"
 
         )
 
@@ -978,9 +1419,7 @@ async def search_handler(
 
         await update.message.reply_text(
 
-            "⚠️ কোনো তথ্য পাওয়া যায়নি। "
-
-            "আবার চেষ্টা করুন।"
+            "⚠️ কোনো তথ্য পাওয়া যায়নি।"
 
         )
 
@@ -1008,6 +1447,38 @@ async def search_handler(
     ]
 
 
+    # ==========================================
+    # জন্মতারিখ Format Check
+    # ==========================================
+
+    if search_type == "dob":
+
+        import re
+
+
+        if not re.match(
+
+            r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$",
+
+            search_text
+
+        ):
+
+            await update.message.reply_text(
+
+                "⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন।\n\n"
+
+                "📌 উদাহরণ:\n"
+
+                "`01/01/2000`",
+
+                parse_mode="Markdown"
+
+            )
+
+            return
+
+
     await update.message.reply_text(
 
         "🔍 Demo Data সার্চ করা হচ্ছে...\n\n"
@@ -1016,6 +1487,10 @@ async def search_handler(
 
     )
 
+
+    # ==========================================
+    # Search
+    # ==========================================
 
     results = search_zip(
 
@@ -1036,11 +1511,34 @@ async def search_handler(
 
     if not results:
 
+        keyboard = [
+
+            [
+
+                InlineKeyboardButton(
+
+                    "🔎 নতুন সার্চ",
+
+                    callback_data="back_search_menu"
+
+                )
+
+            ]
+
+        ]
+
+
         await update.message.reply_text(
 
             "❌ কোনো Demo Data পাওয়া যায়নি।\n\n"
 
-            "🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।"
+            "🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।",
+
+            reply_markup=InlineKeyboardMarkup(
+
+                keyboard
+
+            )
 
         )
 
@@ -1048,23 +1546,39 @@ async def search_handler(
 
 
     # ==========================================
-    # Result Count
+    # Results Save
     # ==========================================
 
-    await update.message.reply_text(
+    context.user_data[
 
-        f"✅ {len(results)} টি "
+        "results"
 
-        f"Demo Data পাওয়া গেছে।"
+    ] = results
 
-    )
+
+    context.user_data[
+
+        "page"
+
+    ] = 0
 
 
     # ==========================================
-    # Send Results
+    # Fake Query Object ব্যবহার না করে
+    # প্রথম ১০টি রিপোর্ট সরাসরি পাঠানো
     # ==========================================
 
-    for row in results:
+    per_page = 10
+
+
+    page_results = results[
+
+        0:per_page
+
+    ]
+
+
+    for row in page_results:
 
         report = make_report(
 
@@ -1082,8 +1596,68 @@ async def search_handler(
         )
 
 
+    # ==========================================
+    # Pagination Buttons
+    # ==========================================
+
+    keyboard = []
+
+
+    if len(results) > 10:
+
+        keyboard.append(
+
+            [
+
+                InlineKeyboardButton(
+
+                    "➡️ আরো দেখুন",
+
+                    callback_data="next_page"
+
+                )
+
+            ]
+
+        )
+
+
+    keyboard.append(
+
+        [
+
+            InlineKeyboardButton(
+
+                "🔎 নতুন সার্চ",
+
+                callback_data="back_search_menu"
+
+            )
+
+        ]
+
+    )
+
+
+    await update.message.reply_text(
+
+        f"📄 মোট ফলাফল: {len(results)} টি\n\n"
+
+        f"📑 প্রথম {min(10, len(results))} টি "
+
+        f"রিপোর্ট দেখানো হয়েছে।",
+
+        reply_markup=InlineKeyboardMarkup(
+
+            keyboard
+
+        )
+
+    )
+
+
 # =====================================================
-# 13. Main
+# 14. Main
 # =====================================================
 
 def main():
@@ -1126,7 +1700,7 @@ def main():
 
 
     # ==========================================
-    # /start Command
+    # /start
     # ==========================================
 
     app.add_handler(
@@ -1143,7 +1717,7 @@ def main():
 
 
     # ==========================================
-    # Inline Button Handler
+    # Button Handler
     # ==========================================
 
     app.add_handler(
@@ -1158,7 +1732,7 @@ def main():
 
 
     # ==========================================
-    # Text Search Handler
+    # Search Handler
     # ==========================================
 
     app.add_handler(
@@ -1191,7 +1765,7 @@ def main():
 
 
 # =====================================================
-# 14. Run
+# 15. Run
 # =====================================================
 
 if __name__ == "__main__":
