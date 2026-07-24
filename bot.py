@@ -33,7 +33,7 @@ TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
 
 
 # =====================================================
-# 2. বাংলা ম্যাপিং (বিভাগ, জেলা ও থানা)
+# 2. বাংলা ম্যাপিং (বিভাগ, জেলা, থানা ও ঠিকানার সাধারণ শব্দ)
 # =====================================================
 
 BANGLA_MAP = {
@@ -50,11 +50,11 @@ BANGLA_MAP = {
     # জেলাসমূহ
     "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
     "nilphamari": "নীলফামারী", "lalmonirhat": "লালমনিরহাট", "kurigram": "কুড়িগ্রাম",
-    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া",
+    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া", "bogra": "বগুড়া",
     "chapainawabganj": "চাঁপাইনবাবগঞ্জ", "naogaon": "নওগাঁ", "natore": "নাটোর",
     "sirajganj": "সিরাজগঞ্জ", "pabna": "পাবনা", "meherpur": "মেহেরপুর",
     "kushtia": "কুষ্টিয়া", "chuadanga": "চুয়াডাঙ্গা", "jhenaidah": "ঝিনাইদহ",
-    "jashore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
+    "jashore": "যশোর", "jessore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
     "bagerhat": "বাগেরহাট", "satkhira": "সাতক্ষীরা", "barguna": "বরগুনা",
     "patuakhali": "পটুয়াখালী", "bhola": "ভোলা", "jhalokati": "ঝালকাঠি",
     "pirojpur": "পিরোজপুর", "tangail": "টাঙ্গাইল", "kishoreganj": "কিশোরগঞ্জ",
@@ -63,32 +63,48 @@ BANGLA_MAP = {
     "faridpur": "ফরিদপুর", "gopalganj": "গোপালগঞ্জ", "madaripur": "মাদারীপুর",
     "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
     "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
-    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
+    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা", "comilla": "কুমিল্লা",
     "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
     "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
     "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
 }
 
-# 🔹 থানার নাম বাংলা করার ম্যাপিং ডিকশনারি
+# 🔹 থানার নাম বাংলা করার বর্ধিত ম্যাপিং ডিকশনারি
 THANA_MAP = {
-    "savar": "সাভার",
-    "dhamrai": "ধামরাই",
-    "keraniganj": "কেরানীগঞ্জ",
-    "dohar": "দোহার",
-    "nawabganj": "নবাবগঞ্জ",
-    "mirpur": "মিরপুর",
-    "uttara": "উত্তরা",
-    "gulshan": "গুলশান",
-    "dhanmondi": "ধানমন্ডি",
-    "gazipur sadar": "গাজীপুর সদর",
-    "kaliakair": "কালিয়াকৈর",
-    "kapasia": "কাপাসিয়া",
-    "sreepur": "শ্রীপুর",
-    "kaliganj": "কালীগঞ্জ",
-    "bogura sadar": "বগুড়া সদর",
-    "sathiya": "সাঁথিয়া",
-    "ishwardi": "ঈশ্বরদী",
-    # 📌 আরও থানা থাকলে ইংরেজিতে ছোট হাতের লিখে ডানপাশে বাংলা যোগ করতে পারেন
+    # ঢাকা ও গাজীপুর
+    "savar": "সাভার", "dhamrai": "ধামরাই", "keraniganj": "কেরানীগঞ্জ", "dohar": "দোহার",
+    "nawabganj": "নবাবগঞ্জ", "mirpur": "মিরপুর", "uttara": "উত্তরা", "gulshan": "গুলশান",
+    "dhanmondi": "ধানমন্ডি", "gazipur sadar": "গাজীপুর সদর", "kaliakair": "কালিয়াকৈর",
+    "kapasia": "কাপাসিয়া", "sreepur": "শ্রীপুর", "kaliganj": "কালীগঞ্জ",
+    "tejgaon": "তেজগাঁও", "ramna": "রমনা", "shahbagh": "শাহবাগ", "paltan": "পল্টন",
+    "motijheel": "মতিঝিল", "jatrabari": "যাত্রাবাড়ী", "kadamtali": "কদমতলী",
+    "badda": "বাড্ডা", "khilkhet": "খিলক্ষেত", "mohammadpur": "মোহাম্মদপুর",
+    "adonbor": "আদাবর", "kafrul": "কাফরুল", "cantonment": "ক্যান্টনমেন্ট",
+
+    # বগুড়া ও পাবনা
+    "bogura sadar": "বগুড়া সদর", "bogra sadar": "বগুড়া সদর", "sathiya": "সাঁথিয়া", 
+    "santhia": "সাঁথিয়া", "ishwardi": "ঈশ্বরদী", "pabna sadar": "পাবনা সদর", 
+    "sherpur": "শেরপুর", "shibganj": "শিবগঞ্জ", "gabtali": "গাবতলী", "kahaloo": "কাহালু",
+    "nandigram": "নন্দীগ্রাম", "dhopchanchia": "দুপচাঁচিয়া", "adamdighi": "আদমদীঘি", 
+    "sariakandi": "সারিয়াকান্দি", "dhunat": "ধুনট", "sonatala": "সোনাভোলা",
+
+    # চট্টগ্রাম ও অন্যান্য
+    "chattogram sadar": "চট্টগ্রাম সদর", "kotwali": "কোতোয়ালী", "panchlaish": "পাঁচলাইশ",
+    "halishahar": "হালিশহর", "patenga": "পতেঙ্গা", "double mooring": "ডবলমুরিং",
+    "sylhet sadar": "সিলেট সদর", "khulna sadar": "খুলনা সদর", "rajshahi sadar": "রাজশাহী সদর",
+    "rangpur sadar": "রংপুর সদর", "barishal sadar": "বরিশাল সদর", "cumilla sadar": "কুমিল্লা সদর"
+}
+
+# 🔹 ঠিকানায় সাধারণ ইংরেজি শব্দগুলোর বাংলা অনুবাদ ডিকশনারি
+ADDRESS_WORDS_MAP = {
+    "village": "গ্রাম", "vill": "গ্রাম", "v/o": "গ্রাম", "v/p": "গ্রাম ও ডাক",
+    "post": "ডাকঘর", "po": "ডাকঘর", "p.o": "ডাকঘর", "p/o": "ডাকঘর",
+    "word": "ওয়ার্ড", "ward": "ওয়ার্ড", "no": "নং", "no.": "নং",
+    "road": "রোড", "rd": "রোড", "house": "বাসা", "holding": "হোন্ডিং",
+    "union": "ইউনিয়ন", "upazila": "উপজেলা", "thana": "থানা", "district": "জেলা",
+    "para": "পাড়া", "mohalla": "মহল্লা", "mahalla": "মহল্লা", "bazar": "বাজার",
+    "east": "পূর্ব", "west": "পশ্চিম", "north": "উত্তর", "south": "দক্ষিণ",
+    "block": "ব্লক", "sector": "সেক্টর"
 }
 
 
@@ -163,8 +179,35 @@ def normalize(text):
 
 
 def get_thana_from_raw(raw_thana):
+    if not raw_thana or raw_thana == "N/A":
+        return "N/A"
     clean = raw_thana.lower().strip()
-    return THANA_MAP.get(clean, raw_thana)
+    
+    # ডিকশনারিতে মিললে সরাসরি ফেরত দিবে
+    if clean in THANA_MAP:
+        return THANA_MAP[clean]
+    
+    # আলাদা আলাদা শব্দ চেষ্টা করবে
+    for k, v in THANA_MAP.items():
+        if k in clean:
+            return v
+            
+    return raw_thana.title()
+
+
+def get_translated_address(raw_address):
+    """ঠিকানায় থাকা ইংরেজি শব্দগুলো (যেমন: Vill, Post, Ward ইত্যাদি) বাংলায় কনভার্ট করে"""
+    if not raw_address or raw_address == "N/A":
+        return "N/A"
+    
+    translated = raw_address
+    
+    # কি-ওয়ার্ড প্রতিস্থাপন
+    for eng_word, bng_word in ADDRESS_WORDS_MAP.items():
+        pattern = re.compile(rf'\b{re.escape(eng_word)}\b', re.IGNORECASE)
+        translated = pattern.sub(bng_word, translated)
+        
+    return translated
 
 
 def search_in_files(file_list, search_input, search_type, target_thana=None):
@@ -212,7 +255,6 @@ def search_in_files(file_list, search_input, search_type, target_thana=None):
 def process_rows(reader, search_input, search_type, column_mappings, seat_name, division, district, target_thana=None):
     results = []
     for row in reader:
-        # থানা ফিল্টারিং থাকলে আগেই যাচাই করে নেওয়া
         if target_thana:
             row_thana = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
             translated_thana = get_thana_from_raw(row_thana)
@@ -281,6 +323,7 @@ def process_rows(reader, search_input, search_type, column_mappings, seat_name, 
     return results
 
 
+# ⚡ স্পিড অপটিমাইজড থানা রিডার
 def extract_thanas_from_district(seat_keys):
     thanas = set()
     for key in seat_keys:
@@ -290,26 +333,34 @@ def extract_thanas_from_district(seat_keys):
         file_path = file_info["file"]
         
         try:
-            reader = None
             if file_path.endswith(".zip"):
                 with zipfile.ZipFile(file_path, 'r') as z:
                     csv_files = [f for f in z.namelist() if f.endswith('.csv')]
                     if csv_files:
-                        content = io.TextIOWrapper(z.open(csv_files[0]), encoding="utf-8-sig", errors="replace")
-                        reader = csv.DictReader(content)
-                        for r in reader:
-                            th = get_value(r, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
-                            if th and th != "N/A":
-                                thanas.add(get_thana_from_raw(th))
+                        with z.open(csv_files[0]) as f:
+                            content = io.TextIOWrapper(f, encoding="utf-8-sig", errors="replace")
+                            reader = csv.DictReader(content)
+                            count = 0
+                            for r in reader:
+                                th = get_value(r, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+                                if th and th != "N/A":
+                                    thanas.add(get_thana_from_raw(th))
+                                count += 1
+                                if count > 2000 and len(thanas) >= 10:
+                                    break
             else:
                 with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
                     reader = csv.DictReader(file)
+                    count = 0
                     for r in reader:
                         th = get_value(r, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
                         if th and th != "N/A":
                             thanas.add(get_thana_from_raw(th))
-        except Exception:
-            pass
+                        count += 1
+                        if count > 2000 and len(thanas) >= 10:
+                            break
+        except Exception as e:
+            print(f"Error reading thana: {e}")
 
     return sorted(list(thanas))
 
@@ -351,7 +402,10 @@ def make_report(row):
     dob = get_value(row, ["dob", "dateofbirth", "birthdate", "জন্ম"])
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
-    address = get_value(row, ["address", "ঠিকানা"])
+    
+    # ঠিকানা ও থানা প্রসেসিং
+    raw_address = get_value(row, ["address", "ঠিকানা"])
+    address = get_translated_address(raw_address)
     
     raw_upazila = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
     upazila = get_thana_from_raw(raw_upazila)
@@ -467,9 +521,16 @@ async def show_thana_menu(query, context):
     district = context.user_data.get("district")
     seat_keys = DIVISIONS_MAP.get(division, {}).get(district, [])
 
-    await safe_edit_message(query, "⏳ থানার তালিকা লোড হচ্ছে, অপেক্ষা করুন...")
+    try:
+        await safe_edit_message(query, "⏳ থানার তালিকা লোড হচ্ছে, অপেক্ষা করুন...")
+    except Exception:
+        pass
 
-    thanas = extract_thanas_from_district(seat_keys)
+    try:
+        thanas = extract_thanas_from_district(seat_keys)
+    except Exception as e:
+        print("Thana reading exception:", e)
+        thanas = []
 
     keyboard = []
     if thanas:
@@ -479,7 +540,7 @@ async def show_thana_menu(query, context):
                 row.append(InlineKeyboardButton(f"📍 {thanas[i+1]}", callback_data=f"thana_{thanas[i+1]}"))
             keyboard.append(row)
     else:
-        keyboard.append([InlineKeyboardButton("❌ কোনো থানা পাওয়া যায়নি (সরাসরি সার্চ করুন)", callback_data="mode_district")])
+        keyboard.append([InlineKeyboardButton("❌ কোনো থানা চিহ্নিত করা যায়নি (জেলাজুড়ে সার্চ করুন)", callback_data="mode_district")])
 
     keyboard.append([InlineKeyboardButton("🔙 অপশন মেনু", callback_data="back_district_options")])
 
@@ -705,7 +766,6 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thana = context.user_data.get("thana")
     seat = context.user_data.get("seat")
 
-    # সার্চের ফাইলের তালিকা ফিল্টার করা
     target_files = []
     if seat:
         if seat in SEAT_FILES:
@@ -804,7 +864,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("🌐 Web Server चालू হয়েছে")
+    print("🌐 Web Server চালু হয়েছে")
 
     app = Application.builder().token(TOKEN).build()
 
@@ -812,7 +872,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
 
-    print("🤖 Telegram Demo Search Bot चालू হয়েছে!")
+    print("🤖 Telegram Demo Search Bot চালু হয়েছে!")
     app.run_polling()
 
 
