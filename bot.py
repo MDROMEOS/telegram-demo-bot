@@ -1,8 +1,15 @@
+import os
 import csv
 import zipfile
+import threading
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from flask import Flask
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,17 +21,18 @@ from telegram.ext import (
 
 
 # =========================================================
-# 1️⃣ এখানে আপনার নতুন Telegram Bot Token বসান
+# 1️⃣ এখানে আপনার Telegram Bot Token বসান
 # =========================================================
 
 TOKEN = "8624453473:AAGruXbUjMfE9w7iVZ7J3ciWtG6wc5oZm_M"
 
 
 # =========================================================
-# 2️⃣ আপনার ZIP এবং CSV ফাইল
+# 2️⃣ ZIP ফাইলের নাম
 # =========================================================
 
 SEAT_FILES = {
+
     "seat_1": {
         "name": "আসন-১",
         "zip": "voters_nfmhzgip.zip",
@@ -52,81 +60,183 @@ SEAT_FILES = {
 
 
 # =========================================================
-# DATA STORAGE
+# 3️⃣ DATA STORAGE
 # =========================================================
 
 DATA = {}
 
 
 # =========================================================
-# ZIP থেকে CSV Load
+# 4️⃣ Render Web Server
 # =========================================================
 
-def load_zip(zip_file, csv_file):
+web_app = Flask(__name__)
 
-    print(f"📦 Loading ZIP: {zip_file}")
+
+@web_app.route("/")
+def home():
+
+    return "Telegram Demo Search Bot is running!"
+
+
+@web_app.route("/health")
+def health():
+
+    return "OK"
+
+
+def run_web_server():
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
+
+    web_app.run(
+
+        host="0.0.0.0",
+
+        port=port
+
+    )
+
+
+# =========================================================
+# 5️⃣ ZIP থেকে CSV Load
+# =========================================================
+
+def load_zip(
+
+    zip_file,
+
+    csv_file
+
+):
+
+    print(
+
+        f"📦 Loading ZIP: {zip_file}"
+
+    )
+
+
+    if not os.path.exists(
+
+        zip_file
+
+    ):
+
+        print(
+
+            f"❌ ZIP পাওয়া যায়নি: {zip_file}"
+
+        )
+
+        return []
+
 
     try:
 
-        with zipfile.ZipFile(zip_file, "r") as z:
+        with zipfile.ZipFile(
+
+            zip_file,
+
+            "r"
+
+        ) as z:
+
 
             target = None
 
+
             # নির্দিষ্ট CSV খোঁজা
+
             for name in z.namelist():
 
-                if name.endswith(csv_file):
+                if name.endswith(
+
+                    csv_file
+
+                ):
 
                     target = name
+
                     break
 
 
-            # নির্দিষ্ট CSV না পেলে ZIP-এর যেকোনো CSV খোঁজা
+            # না পেলে ZIP-এর ভিতরের প্রথম CSV নেওয়া
+
             if target is None:
 
                 for name in z.namelist():
 
-                    if name.lower().endswith(".csv"):
+                    if name.lower().endswith(
+
+                        ".csv"
+
+                    ):
 
                         target = name
+
                         break
 
 
             if target is None:
 
                 print(
+
                     f"❌ CSV পাওয়া যায়নি: {csv_file}"
+
                 )
 
                 return []
 
 
             print(
+
                 f"📄 CSV পাওয়া গেছে: {target}"
+
             )
 
 
-            # CSV Read
-            with z.open(target) as f:
+            with z.open(
+
+                target
+
+            ) as f:
 
                 raw = f.read()
 
 
-            # Encoding
+            # Encoding Detect
+
             text = None
 
+
             for encoding in [
+
                 "utf-8-sig",
+
                 "utf-8",
+
                 "cp1252",
+
                 "latin-1"
+
             ]:
 
                 try:
 
-                    text = raw.decode(encoding)
+                    text = raw.decode(
+
+                        encoding
+
+                    )
 
                     break
+
 
                 except UnicodeDecodeError:
 
@@ -136,15 +246,20 @@ def load_zip(zip_file, csv_file):
             if text is None:
 
                 print(
+
                     "❌ CSV Encoding পড়া যায়নি"
+
                 )
 
                 return []
 
 
             # CSV Reader
+
             reader = csv.DictReader(
+
                 text.splitlines()
+
             )
 
 
@@ -155,71 +270,90 @@ def load_zip(zip_file, csv_file):
 
                 clean_row = {}
 
+
                 for key, value in row.items():
 
                     if key:
 
                         clean_row[
+
                             str(key).strip()
+
                         ] = str(
+
                             value or ""
+
                         ).strip()
 
 
-                rows.append(clean_row)
+                rows.append(
+
+                    clean_row
+
+                )
 
 
             print(
-                f"✅ Loaded: {len(rows)} records"
+
+                f"✅ {csv_file} "
+
+                f"Loaded: {len(rows)} records"
+
             )
 
 
-            # Column দেখাবে
             if rows:
 
                 print(
+
                     "📌 Columns:",
-                    list(rows[0].keys())
+
+                    list(
+
+                        rows[0].keys()
+
+                    )
+
                 )
 
 
             return rows
 
 
-    except FileNotFoundError:
-
-        print(
-            f"❌ ZIP ফাইল পাওয়া যায়নি: {zip_file}"
-        )
-
-        return []
-
-
     except Exception as e:
 
         print(
+
             f"❌ ZIP Error: {e}"
+
         )
 
         return []
 
 
 # =========================================================
-# সব আসনের ডাটা Load
+# 6️⃣ সব আসনের ডাটা Load
 # =========================================================
 
 def load_all_data():
 
     print(
+
         "================================"
+
     )
 
     print(
-        "📦 CSV DATABASE LOADING..."
+
+        "📦 DATABASE LOADING..."
+
     )
 
     print(
+
         "================================"
+
+
     )
 
 
@@ -244,23 +378,35 @@ def load_all_data():
 
 
     print(
+
         "================================"
+
     )
 
     print(
+
         "✅ DATABASE LOADING COMPLETE"
+
     )
 
     print(
+
         "================================"
+
     )
 
 
 # =========================================================
-# Column খোঁজা
+# 7️⃣ Column খোঁজা
 # =========================================================
 
-def find_column(row, possible_names):
+def find_column(
+
+    row,
+
+    possible_names
+
+):
 
     for key in row.keys():
 
@@ -309,10 +455,16 @@ def find_column(row, possible_names):
 
 
 # =========================================================
-# Value নেওয়া
+# 8️⃣ Value নেওয়া
 # =========================================================
 
-def get_value(row, possible_names):
+def get_value(
+
+    row,
+
+    possible_names
+
+):
 
     column = find_column(
 
@@ -347,15 +499,14 @@ def get_value(row, possible_names):
 
 
 # =========================================================
-# বয়স হিসাব
+# 9️⃣ বয়স হিসাব
 # =========================================================
 
-def calculate_age(dob):
+def calculate_age(
 
-    if not dob:
+    dob
 
-        return "N/A"
-
+):
 
     formats = [
 
@@ -417,7 +568,11 @@ def calculate_age(dob):
             )
 
 
-            return str(age)
+            return str(
+
+                age
+
+            )
 
 
         except:
@@ -429,10 +584,16 @@ def calculate_age(dob):
 
 
 # =========================================================
-# রিপোর্ট তৈরি
+# 🔟 রিপোর্ট তৈরি
 # =========================================================
 
-def make_report(row, seat_name):
+def make_report(
+
+    row,
+
+    seat_name
+
+):
 
     name = get_value(
 
@@ -686,7 +847,7 @@ def make_report(row, seat_name):
 
 
 # =========================================================
-# START COMMAND
+# 1️⃣1️⃣ START COMMAND
 # =========================================================
 
 async def start(
@@ -760,7 +921,7 @@ async def start(
 
 
 # =========================================================
-# BUTTON HANDLER
+# 1️⃣2️⃣ BUTTON HANDLER
 # =========================================================
 
 async def button_handler(
@@ -801,7 +962,7 @@ async def button_handler(
 
 
 # =========================================================
-# SEARCH HANDLER
+# 1️⃣3️⃣ SEARCH HANDLER
 # =========================================================
 
 async def search_handler(
@@ -870,14 +1031,18 @@ async def search_handler(
 
         if search_text in all_text:
 
-            results.append(row)
+            results.append(
+
+                row
+
+            )
 
 
     if not results:
 
         await update.message.reply_text(
 
-            "❌ কোনো তথ্য পাওয়া যায়নি।"
+            "❌ কোনো তথ্য পাওয়া যায়নি।"
 
         )
 
@@ -888,12 +1053,12 @@ async def search_handler(
 
         f"✅ মোট {len(results)} টি "
 
-        f"তথ্য পাওয়া গেছে।"
+        f"তথ্য পাওয়া গেছে।"
 
     )
 
 
-    # সর্বোচ্চ ১০টি ফলাফল দেখাবে
+    # একবারে সর্বোচ্চ ১০টি রেজাল্ট
 
     for row in results[:10]:
 
@@ -914,17 +1079,35 @@ async def search_handler(
 
 
 # =========================================================
-# MAIN
+# 1️⃣4️⃣ MAIN
 # =========================================================
 
 def main():
 
-    # Database Load
+    # প্রথমে ডাটা লোড
 
     load_all_data()
 
 
-    # Telegram Application
+    # Render Web Server চালু
+
+    threading.Thread(
+
+        target=run_web_server,
+
+        daemon=True
+
+    ).start()
+
+
+    print(
+
+        "🌐 Render Web Server চালু হয়েছে"
+
+    )
+
+
+    # Telegram Bot
 
     app = (
 
@@ -939,8 +1122,6 @@ def main():
     )
 
 
-    # /start
-
     app.add_handler(
 
         CommandHandler(
@@ -954,8 +1135,6 @@ def main():
     )
 
 
-    # Button
-
     app.add_handler(
 
         CallbackQueryHandler(
@@ -966,8 +1145,6 @@ def main():
 
     )
 
-
-    # Search
 
     app.add_handler(
 
@@ -991,13 +1168,13 @@ def main():
     )
 
 
-    # Run
+    # Bot চালু
 
     app.run_polling()
 
 
 # =========================================================
-# RUN BOT
+# RUN
 # =========================================================
 
 if __name__ == "__main__":
