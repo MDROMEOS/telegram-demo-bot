@@ -2,14 +2,9 @@ import os
 import csv
 import zipfile
 import threading
-from datetime import datetime
 
 from flask import Flask
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -19,38 +14,33 @@ from telegram.ext import (
     filters,
 )
 
-
-# =========================================================
-# 1️⃣ এখানে আপনার Telegram Bot Token বসান
-# =========================================================
+# =====================================================
+# 1. এখানে আপনার Telegram Bot Token বসান
+# =====================================================
 
 TOKEN = "8624453473:AAGruXbUjMfE9w7iVZ7J3ciWtG6wc5oZm_M"
 
 
-# =========================================================
-# 2️⃣ ZIP ফাইলের নাম
-# =========================================================
+# =====================================================
+# 2. ZIP ফাইলের নাম
+# =====================================================
 
 SEAT_FILES = {
-
     "seat_1": {
         "name": "আসন-১",
         "zip": "voters_nfmhzgip.zip",
         "csv": "voters_nfmhzgip.csv",
     },
-
     "seat_2": {
         "name": "আসন-২",
         "zip": "voters_h05css89.zip",
         "csv": "voters_h05css89.csv",
     },
-
     "seat_3": {
         "name": "আসন-৩",
         "zip": "voters_p_8guvlz.zip",
         "csv": "voters_p_8guvlz.csv",
     },
-
     "seat_4": {
         "name": "আসন-৪",
         "zip": "voters_d_evylnn.zip",
@@ -59,845 +49,375 @@ SEAT_FILES = {
 }
 
 
-# =========================================================
-# 3️⃣ DATA STORAGE
-# =========================================================
-
-DATA = {}
-
-
-# =========================================================
-# 4️⃣ Render Web Server
-# =========================================================
+# =====================================================
+# 3. Render Web Server
+# =====================================================
 
 web_app = Flask(__name__)
 
 
 @web_app.route("/")
 def home():
-
-    return "Telegram Demo Search Bot is running!"
+    return "Telegram Demo Bot is running!"
 
 
 @web_app.route("/health")
 def health():
-
     return "OK"
 
 
 def run_web_server():
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
+    port = int(os.environ.get("PORT", 10000))
 
     web_app.run(
-
         host="0.0.0.0",
-
         port=port
-
     )
 
 
-# =========================================================
-# 5️⃣ ZIP থেকে CSV Load
-# =========================================================
+# =====================================================
+# 4. Column Name Normalize
+# =====================================================
 
-def load_zip(
-
-    zip_file,
-
-    csv_file
-
-):
-
-    print(
-
-        f"📦 Loading ZIP: {zip_file}"
-
+def normalize(text):
+    return (
+        str(text)
+        .strip()
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+        .replace("-", "")
     )
 
 
-    if not os.path.exists(
+# =====================================================
+# 5. ZIP-এর ভিতরে CSV খোঁজা
+# =====================================================
 
-        zip_file
+def find_csv_in_zip(zip_path, expected_csv):
 
-    ):
+    if not os.path.exists(zip_path):
+        return None
 
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+
+            # আগে নির্দিষ্ট CSV খুঁজবে
+            for name in z.namelist():
+
+                if name.endswith(expected_csv):
+                    return name
+
+            # না পেলে প্রথম CSV নেবে
+            for name in z.namelist():
+
+                if name.lower().endswith(".csv"):
+                    return name
+
+    except Exception as e:
+
+        print("ZIP Error:", e)
+
+    return None
+
+
+# =====================================================
+# 6. CSV Search
+# একসাথে পুরো CSV RAM-এ লোড করবে না
+# =====================================================
+
+def search_zip(zip_path, csv_name, search_text):
+
+    csv_inside = find_csv_in_zip(
+        zip_path,
+        csv_name
+    )
+
+    if not csv_inside:
         print(
-
-            f"❌ ZIP পাওয়া যায়নি: {zip_file}"
-
+            f"CSV পাওয়া যায়নি: {csv_name}"
         )
 
         return []
+
+
+    results = []
 
 
     try:
 
         with zipfile.ZipFile(
-
-            zip_file,
-
+            zip_path,
             "r"
-
         ) as z:
 
-
-            target = None
-
-
-            # নির্দিষ্ট CSV খোঁজা
-
-            for name in z.namelist():
-
-                if name.endswith(
-
-                    csv_file
-
-                ):
-
-                    target = name
-
-                    break
-
-
-            # না পেলে ZIP-এর ভিতরের প্রথম CSV নেওয়া
-
-            if target is None:
-
-                for name in z.namelist():
-
-                    if name.lower().endswith(
-
-                        ".csv"
-
-                    ):
-
-                        target = name
-
-                        break
-
-
-            if target is None:
-
-                print(
-
-                    f"❌ CSV পাওয়া যায়নি: {csv_file}"
-
-                )
-
-                return []
-
-
-            print(
-
-                f"📄 CSV পাওয়া গেছে: {target}"
-
-            )
-
-
             with z.open(
+                csv_inside
+            ) as file:
 
-                target
+                # Text stream
+                import io
 
-            ) as f:
-
-                raw = f.read()
-
-
-            # Encoding Detect
-
-            text = None
-
-
-            for encoding in [
-
-                "utf-8-sig",
-
-                "utf-8",
-
-                "cp1252",
-
-                "latin-1"
-
-            ]:
-
-                try:
-
-                    text = raw.decode(
-
-                        encoding
-
-                    )
-
-                    break
-
-
-                except UnicodeDecodeError:
-
-                    continue
-
-
-            if text is None:
-
-                print(
-
-                    "❌ CSV Encoding পড়া যায়নি"
-
-                )
-
-                return []
-
-
-            # CSV Reader
-
-            reader = csv.DictReader(
-
-                text.splitlines()
-
-            )
-
-
-            rows = []
-
-
-            for row in reader:
-
-                clean_row = {}
-
-
-                for key, value in row.items():
-
-                    if key:
-
-                        clean_row[
-
-                            str(key).strip()
-
-                        ] = str(
-
-                            value or ""
-
-                        ).strip()
-
-
-                rows.append(
-
-                    clean_row
-
+                text_file = io.TextIOWrapper(
+                    file,
+                    encoding="utf-8-sig",
+                    errors="replace",
+                    newline=""
                 )
 
 
-            print(
-
-                f"✅ {csv_file} "
-
-                f"Loaded: {len(rows)} records"
-
-            )
-
-
-            if rows:
-
-                print(
-
-                    "📌 Columns:",
-
-                    list(
-
-                        rows[0].keys()
-
-                    )
-
+                reader = csv.DictReader(
+                    text_file
                 )
 
 
-            return rows
+                for row in reader:
+
+                    # সার্চের জন্য পুরো Row-এর
+                    # টেক্সট তৈরি
+                    searchable = " ".join(
+
+                        str(value or "")
+
+                        for value in row.values()
+
+                    ).lower()
+
+
+                    if search_text.lower() in searchable:
+
+                        results.append(
+                            dict(row)
+                        )
+
+
+                        # RAM ও Telegram message
+                        # সীমিত রাখার জন্য ১০টি ফলাফল
+                        if len(results) >= 10:
+                            break
 
 
     except Exception as e:
 
         print(
-
-            f"❌ ZIP Error: {e}"
-
-        )
-
-        return []
-
-
-# =========================================================
-# 6️⃣ সব আসনের ডাটা Load
-# =========================================================
-
-def load_all_data():
-
-    print(
-
-        "================================"
-
-    )
-
-    print(
-
-        "📦 DATABASE LOADING..."
-
-    )
-
-    print(
-
-        "================================"
-
-
-    )
-
-
-    for seat_key, info in SEAT_FILES.items():
-
-        DATA[seat_key] = load_zip(
-
-            info["zip"],
-
-            info["csv"]
-
+            "CSV Search Error:",
+            e
         )
 
 
-        print(
+    return results
 
-            f"🏛 {info['name']} : "
 
-            f"{len(DATA[seat_key])} records"
+# =====================================================
+# 7. Demo Report
+# =====================================================
 
+def get_value(row, names):
+
+    normalized_row = {
+        normalize(k): v
+        for k, v in row.items()
+    }
+
+
+    for name in names:
+
+        value = normalized_row.get(
+            normalize(name)
         )
-
-
-    print(
-
-        "================================"
-
-    )
-
-    print(
-
-        "✅ DATABASE LOADING COMPLETE"
-
-    )
-
-    print(
-
-        "================================"
-
-    )
-
-
-# =========================================================
-# 7️⃣ Column খোঁজা
-# =========================================================
-
-def find_column(
-
-    row,
-
-    possible_names
-
-):
-
-    for key in row.keys():
-
-        clean_key = (
-
-            str(key)
-
-            .strip()
-
-            .lower()
-
-            .replace(" ", "")
-
-            .replace("_", "")
-
-            .replace("-", "")
-
-        )
-
-
-        for name in possible_names:
-
-            clean_name = (
-
-                str(name)
-
-                .strip()
-
-                .lower()
-
-                .replace(" ", "")
-
-                .replace("_", "")
-
-                .replace("-", "")
-
-            )
-
-
-            if clean_key == clean_name:
-
-                return key
-
-
-    return None
-
-
-# =========================================================
-# 8️⃣ Value নেওয়া
-# =========================================================
-
-def get_value(
-
-    row,
-
-    possible_names
-
-):
-
-    column = find_column(
-
-        row,
-
-        possible_names
-
-    )
-
-
-    if column:
-
-        value = str(
-
-            row.get(
-
-                column,
-
-                ""
-
-            )
-
-        ).strip()
 
 
         if value:
 
-            return value
-
-
-    return "N/A"
-
-
-# =========================================================
-# 9️⃣ বয়স হিসাব
-# =========================================================
-
-def calculate_age(
-
-    dob
-
-):
-
-    formats = [
-
-        "%d/%m/%Y",
-
-        "%d-%m-%Y",
-
-        "%Y-%m-%d",
-
-        "%d.%m.%Y",
-
-    ]
-
-
-    for fmt in formats:
-
-        try:
-
-            birth = datetime.strptime(
-
-                dob,
-
-                fmt
-
-            )
-
-
-            today = datetime.today()
-
-
-            age = (
-
-                today.year
-
-                - birth.year
-
-                - (
-
-                    (
-
-                        today.month,
-
-                        today.day
-
-                    )
-
-                    <
-
-                    (
-
-                        birth.month,
-
-                        birth.day
-
-                    )
-
-                )
-
-            )
-
-
             return str(
-
-                age
-
-            )
-
-
-        except:
-
-            continue
+                value
+            ).strip()
 
 
     return "N/A"
 
-
-# =========================================================
-# 🔟 রিপোর্ট তৈরি
-# =========================================================
 
 def make_report(
-
     row,
-
     seat_name
-
 ):
 
     name = get_value(
-
         row,
-
         [
-
             "name",
-
             "fullname",
-
             "নাম"
-
         ]
-
     )
 
 
-    nid = get_value(
-
+    demo_id = get_value(
         row,
-
         [
-
-            "nid",
-
-            "nidnumber",
-
-            "nationalid",
-
-            "nationalidnumber"
-
+            "demo_id",
+            "demoid",
+            "id"
         ]
-
     )
 
 
     serial = get_value(
-
         row,
-
         [
-
             "serial",
-
             "serialnumber",
-
-            "ক্রমিক",
-
             "সিরিয়াল"
-
         ]
-
     )
 
 
     father = get_value(
-
         row,
-
         [
-
             "father",
-
             "fathername",
-
-            "পিতা",
-
-            "পিতারনাম"
-
+            "পিতা"
         ]
-
     )
 
 
     mother = get_value(
-
         row,
-
         [
-
             "mother",
-
             "mothername",
-
-            "মাতা",
-
-            "মাতারনাম"
-
+            "মাতা"
         ]
-
     )
 
 
     dob = get_value(
-
         row,
-
         [
-
             "dob",
-
             "dateofbirth",
-
             "birthdate",
-
-            "জন্ম",
-
-            "জন্মতারিখ"
-
+            "জন্ম"
         ]
-
     )
 
 
     gender = get_value(
-
         row,
-
         [
-
             "gender",
-
             "sex",
-
             "লিঙ্গ"
-
         ]
-
     )
 
 
     occupation = get_value(
-
         row,
-
         [
-
             "occupation",
-
             "profession",
-
             "পেশা"
-
         ]
-
     )
 
 
     address = get_value(
-
         row,
-
         [
-
             "address",
-
             "ঠিকানা"
-
         ]
-
     )
 
 
     thana = get_value(
-
         row,
-
         [
-
             "thana",
-
             "policestation",
-
-            "police station",
-
             "থানা"
-
         ]
-
     )
 
 
     district = get_value(
-
         row,
-
         [
-
             "district",
-
             "জেলা"
-
         ]
-
     )
 
 
     division = get_value(
-
         row,
-
         [
-
             "division",
-
             "বিভাগ"
-
         ]
-
     )
 
 
-    seat_code = get_value(
-
+    code = get_value(
         row,
-
         [
-
+            "code",
             "seatcode",
-
-            "seat code",
-
             "আসনকোড"
-
         ]
-
-    )
-
-
-    age = calculate_age(
-
-        dob
-
     )
 
 
     return f"""🪪 {name}
 ────────────────────
-🔢 NID  {nid}
+🔢 Demo ID  {demo_id}
 🔖 সিরিয়াল  {serial}
 👨 পিতা  {father}
 👩 মাতা  {mother}
-🎂 জন্ম  {dob} · {age} বছর
+🎂 জন্ম  {dob}
 ⚧ লিঙ্গ  {gender}
 💼 পেশা  {occupation}
 🏠 ঠিকানা  {address}
 📍 থানা  {thana}
-🗺 জেলা  {district}  ·  বিভাগ  {division}
-🏛 আসন  {seat_name}  ·  কোড  {seat_code}"""
+🗺 জেলা  {district} · বিভাগ  {division}
+🏛 আসন  {seat_name} · কোড  {code}"""
 
 
-# =========================================================
-# 1️⃣1️⃣ START COMMAND
-# =========================================================
+# =====================================================
+# 8. /start
+# =====================================================
 
 async def start(
-
     update: Update,
-
     context: ContextTypes.DEFAULT_TYPE
-
 ):
 
     keyboard = [
 
         [
-
             InlineKeyboardButton(
-
                 "🏛 আসন-১",
-
                 callback_data="seat_1"
-
             ),
 
             InlineKeyboardButton(
-
                 "🏛 আসন-২",
-
                 callback_data="seat_2"
-
             ),
-
         ],
 
         [
-
             InlineKeyboardButton(
-
                 "🏛 আসন-৩",
-
                 callback_data="seat_3"
-
             ),
 
             InlineKeyboardButton(
-
                 "🏛 আসন-৪",
-
                 callback_data="seat_4"
-
             ),
-
         ],
 
     ]
@@ -905,35 +425,25 @@ async def start(
 
     await update.message.reply_text(
 
-        "🤖 ডেমো ডাটা সার্চ বট\n\n"
-
-        "📍 যে আসনে সার্চ করতে চান "
-
-        "সেটি নির্বাচন করুন:",
+        "🤖 Demo Data Search Bot\n\n"
+        "📍 একটি আসন নির্বাচন করুন:",
 
         reply_markup=InlineKeyboardMarkup(
-
             keyboard
-
         )
-
     )
 
 
-# =========================================================
-# 1️⃣2️⃣ BUTTON HANDLER
-# =========================================================
+# =====================================================
+# 9. Seat Button
+# =====================================================
 
 async def button_handler(
-
     update: Update,
-
     context: ContextTypes.DEFAULT_TYPE
-
 ):
 
     query = update.callback_query
-
 
     await query.answer()
 
@@ -942,35 +452,28 @@ async def button_handler(
 
 
     context.user_data[
-
         "seat"
-
     ] = seat
 
 
     await query.edit_message_text(
 
-        f"🏛 {SEAT_FILES[seat]['name']} "
+        f"✅ {SEAT_FILES[seat]['name']} "
+        f"নির্বাচিত হয়েছে।\n\n"
 
-        f"নির্বাচিত হয়েছে।\n\n"
-
-        "🔍 এখন NID, নাম, পিতার নাম "
-
-        "অথবা মাতার নাম লিখে পাঠান।"
+        "🔍 এখন Demo ID বা নাম লিখে "
+        "সার্চ করুন।"
 
     )
 
 
-# =========================================================
-# 1️⃣3️⃣ SEARCH HANDLER
-# =========================================================
+# =====================================================
+# 10. Search
+# =====================================================
 
 async def search_handler(
-
     update: Update,
-
     context: ContextTypes.DEFAULT_TYPE
-
 ):
 
     if "seat" not in context.user_data:
@@ -978,7 +481,6 @@ async def search_handler(
         await update.message.reply_text(
 
             "⚠️ প্রথমে /start লিখে "
-
             "আসন নির্বাচন করুন।"
 
         )
@@ -992,57 +494,42 @@ async def search_handler(
 
         .strip()
 
-        .lower()
-
     )
 
 
     seat = context.user_data[
-
         "seat"
-
     ]
 
 
-    rows = DATA.get(
+    info = SEAT_FILES[
+        seat
+    ]
 
-        seat,
 
-        []
+    await update.message.reply_text(
+
+        "🔍 Demo Data সার্চ করা হচ্ছে..."
 
     )
 
 
-    results = []
+    results = search_zip(
 
+        info["zip"],
 
-    for row in rows:
+        info["csv"],
 
-        all_text = " ".join(
+        search_text
 
-            str(value)
-
-            .lower()
-
-            for value in row.values()
-
-        )
-
-
-        if search_text in all_text:
-
-            results.append(
-
-                row
-
-            )
+    )
 
 
     if not results:
 
         await update.message.reply_text(
 
-            "❌ কোনো তথ্য পাওয়া যায়নি।"
+            "❌ কোনো Demo Data পাওয়া যায়নি।"
 
         )
 
@@ -1051,22 +538,19 @@ async def search_handler(
 
     await update.message.reply_text(
 
-        f"✅ মোট {len(results)} টি "
-
-        f"তথ্য পাওয়া গেছে।"
+        f"✅ {len(results)} টি "
+        f"Demo Data পাওয়া গেছে।"
 
     )
 
 
-    # একবারে সর্বোচ্চ ১০টি রেজাল্ট
-
-    for row in results[:10]:
+    for row in results:
 
         report = make_report(
 
             row,
 
-            SEAT_FILES[seat]["name"]
+            info["name"]
 
         )
 
@@ -1078,19 +562,13 @@ async def search_handler(
         )
 
 
-# =========================================================
-# 1️⃣4️⃣ MAIN
-# =========================================================
+# =====================================================
+# 11. Main
+# =====================================================
 
 def main():
 
-    # প্রথমে ডাটা লোড
-
-    load_all_data()
-
-
-    # Render Web Server চালু
-
+    # Render Web Server
     threading.Thread(
 
         target=run_web_server,
@@ -1101,14 +579,11 @@ def main():
 
 
     print(
-
-        "🌐 Render Web Server চালু হয়েছে"
-
+        "🌐 Web Server চালু হয়েছে"
     )
 
 
     # Telegram Bot
-
     app = (
 
         Application
@@ -1125,11 +600,8 @@ def main():
     app.add_handler(
 
         CommandHandler(
-
             "start",
-
             start
-
         )
 
     )
@@ -1138,9 +610,7 @@ def main():
     app.add_handler(
 
         CallbackQueryHandler(
-
             button_handler
-
         )
 
     )
@@ -1151,7 +621,6 @@ def main():
         MessageHandler(
 
             filters.TEXT
-
             & ~filters.COMMAND,
 
             search_handler
@@ -1162,20 +631,16 @@ def main():
 
 
     print(
-
-        "🤖 Telegram Bot চালু হয়েছে!"
-
+        "🤖 Telegram Demo Bot চালু হয়েছে!"
     )
 
-
-    # Bot চালু
 
     app.run_polling()
 
 
-# =========================================================
-# RUN
-# =========================================================
+# =====================================================
+# 12. Run
+# =====================================================
 
 if __name__ == "__main__":
 
