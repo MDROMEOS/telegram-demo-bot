@@ -184,22 +184,13 @@ def find_csv_in_zip(
 
 
 # =====================================================
-# 6. CSV Search
-#
-# Search Type:
-# demo_id
-# name
-# father
-# mother
-# dob
-#
-# এখানে সব Matching Result সংগ্রহ হবে
+# 6. CSV Search (Single & Multi AND Search)
 # =====================================================
 
 def search_zip(
     zip_path,
     csv_name,
-    search_text,
+    search_input,
     search_type
 ):
 
@@ -223,6 +214,21 @@ def search_zip(
 
 
     results = []
+
+
+    column_mappings = {
+
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
+
+        "name": ["name", "fullname", "নাম"],
+
+        "father": ["father", "fathername", "পিতা"],
+
+        "mother": ["mother", "mothername", "মাতা"],
+
+        "dob": ["dob", "dateofbirth", "birthdate", "জন্ম"]
+
+    }
 
 
     try:
@@ -256,77 +262,6 @@ def search_zip(
 
                 for row in reader:
 
-                    # =================================
-                    # কোন কলামে Search হবে
-                    # =================================
-
-                    if search_type == "demo_id":
-
-                        search_columns = [
-
-                            "voter_no",
-                            "voterno",
-                            "demo_id",
-                            "demoid",
-                            "id"
-
-                        ]
-
-
-                    elif search_type == "name":
-
-                        search_columns = [
-
-                            "name",
-                            "fullname",
-                            "নাম"
-
-                        ]
-
-
-                    elif search_type == "father":
-
-                        search_columns = [
-
-                            "father",
-                            "fathername",
-                            "পিতা"
-
-                        ]
-
-
-                    elif search_type == "mother":
-
-                        search_columns = [
-
-                            "mother",
-                            "mothername",
-                            "মাতা"
-
-                        ]
-
-
-                    elif search_type == "dob":
-
-                        search_columns = [
-
-                            "dob",
-                            "dateofbirth",
-                            "birthdate",
-                            "জন্ম"
-
-                        ]
-
-
-                    else:
-
-                        search_columns = []
-
-
-                    # =================================
-                    # CSV Column Normalize
-                    # =================================
-
                     normalized_row = {
 
                         normalize(k): str(v or "")
@@ -337,121 +272,102 @@ def search_zip(
 
 
                     # =================================
-                    # Search Value খোঁজা
+                    # Multi Search (AND Filter) Logic
                     # =================================
 
-                    found_value = ""
+                    if search_type == "multi":
+
+                        is_match = True
 
 
-                    for column in search_columns:
+                        for field, search_val in search_input.items():
 
-                        column_name = normalize(
-                            column
-                        )
+                            if not search_val:
 
-
-                        if column_name in normalized_row:
-
-                            found_value = (
-
-                                normalized_row[
-
-                                    column_name
-
-                                ]
-
-                            )
-
-                            break
+                                continue
 
 
-                    # =================================
-                    # Search Format
-                    # =================================
-
-                    search_value = (
-
-                        str(search_text)
-
-                        .strip()
-
-                        .lower()
-
-                    )
+                            possible_cols = column_mappings.get(field, [])
 
 
-                    found_value_normalized = (
-
-                        str(found_value)
-
-                        .strip()
-
-                        .lower()
-
-                    )
+                            found_value = ""
 
 
-                    # =================================
-                    # জন্মতারিখ Normalize
-                    #
-                    # 01/01/2000
-                    # 01-01-2000
-                    # 01.01.2000
-                    # =================================
+                            for col in possible_cols:
 
-                    if search_type == "dob":
-
-                        search_value = (
-
-                            search_value
-
-                            .replace(
-                                "-",
-                                "/"
-                            )
-
-                            .replace(
-                                ".",
-                                "/"
-                            )
-
-                        )
+                                norm_col = normalize(col)
 
 
-                        found_value_normalized = (
+                                if norm_col in normalized_row:
 
-                            found_value_normalized
+                                    found_value = normalized_row[norm_col]
 
-                            .replace(
-                                "-",
-                                "/"
-                            )
+                                    break
 
-                            .replace(
-                                ".",
-                                "/"
-                            )
 
-                        )
+                            s_val = str(search_val).strip().lower()
+
+                            f_val = str(found_value).strip().lower()
+
+
+                            if field == "dob":
+
+                                s_val = s_val.replace("-", "/").replace(".", "/")
+
+                                f_val = f_val.replace("-", "/").replace(".", "/")
+
+
+                            if s_val not in f_val:
+
+                                is_match = False
+
+                                break
+
+
+                        if is_match:
+
+                            results.append(dict(row))
 
 
                     # =================================
-                    # Match
+                    # Single Search Logic
                     # =================================
 
-                    if (
+                    else:
 
-                        search_value
+                        search_columns = column_mappings.get(search_type, [])
 
-                        in found_value_normalized
 
-                    ):
+                        found_value = ""
 
-                        results.append(
 
-                            dict(row)
+                        for column in search_columns:
 
-                        )
+                            column_name = normalize(column)
+
+
+                            if column_name in normalized_row:
+
+                                found_value = normalized_row[column_name]
+
+                                break
+
+
+                        search_value = str(search_input).strip().lower()
+
+                        found_value_normalized = str(found_value).strip().lower()
+
+
+                        if search_type == "dob":
+
+                            search_value = search_value.replace("-", "/").replace(".", "/")
+
+                            found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+
+
+                        if search_value in found_value_normalized:
+
+                            results.append(dict(row))
 
 
     except Exception as e:
@@ -512,9 +428,6 @@ def get_value(
 
 # =====================================================
 # 8. রিপোর্ট তৈরি
-#
-# বিভাগ ও জেলা = মেনু থেকে
-# উপজেলা/থানা ও পোস্ট কোড = CSV থেকে
 # =====================================================
 
 def make_report(
@@ -523,10 +436,6 @@ def make_report(
     division,
     district
 ):
-
-    # ==========================================
-    # Basic Information
-    # ==========================================
 
     voter_no = get_value(
 
@@ -647,10 +556,6 @@ def make_report(
     )
 
 
-    # ==========================================
-    # Location Information
-    # ==========================================
-
     area = get_value(
 
         row,
@@ -693,10 +598,6 @@ def make_report(
 
     )
 
-
-    # ==========================================
-    # রিপোর্ট
-    # ==========================================
 
     return f"""🪪 Demo Voter Report
 
@@ -941,6 +842,18 @@ async def show_search_menu(
 
             InlineKeyboardButton(
 
+                "⚡ Multi Search (AND Search)",
+
+                callback_data="search_multi"
+
+            )
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
                 "🆔 Demo ID",
 
                 callback_data="search_demo_id"
@@ -1152,10 +1065,6 @@ async def send_page(
     ]
 
 
-    # ==========================================
-    # রিপোর্ট পাঠানো
-    # ==========================================
-
     for row in page_results:
 
         report = make_report(
@@ -1177,10 +1086,6 @@ async def send_page(
 
         )
 
-
-    # ==========================================
-    # Button
-    # ==========================================
 
     keyboard = []
 
@@ -1261,10 +1166,6 @@ async def button_handler(
     data = query.data
 
 
-    # ==========================================
-    # বিভাগ নির্বাচন
-    # ==========================================
-
     if data == "show_division":
 
         context.user_data[
@@ -1283,10 +1184,6 @@ async def button_handler(
 
         return
 
-
-    # ==========================================
-    # বিভাগ Confirm
-    # ==========================================
 
     if data == "division_chattogram":
 
@@ -1309,10 +1206,6 @@ async def button_handler(
         return
 
 
-    # ==========================================
-    # জেলা নির্বাচন
-    # ==========================================
-
     if data == "district_lakshmipur":
 
         context.user_data[
@@ -1334,10 +1227,6 @@ async def button_handler(
         return
 
 
-    # ==========================================
-    # পূর্বের মেনু - বিভাগ
-    # ==========================================
-
     if data == "back_division":
 
         await show_division_menu(
@@ -1349,10 +1238,6 @@ async def button_handler(
 
         return
 
-
-    # ==========================================
-    # পূর্বের মেনু - জেলা
-    # ==========================================
 
     if data == "back_district":
 
@@ -1367,10 +1252,6 @@ async def button_handler(
 
         return
 
-
-    # ==========================================
-    # আসন নির্বাচন
-    # ==========================================
 
     if data in SEAT_FILES:
 
@@ -1402,10 +1283,6 @@ async def button_handler(
         return
 
 
-    # ==========================================
-    # আসন পরিবর্তন
-    # ==========================================
-
     if data == "back_seat":
 
         await show_seat_menu(
@@ -1419,10 +1296,6 @@ async def button_handler(
 
         return
 
-
-    # ==========================================
-    # নতুন সার্চ
-    # ==========================================
 
     if data == "new_search":
 
@@ -1465,10 +1338,6 @@ async def button_handler(
         return
 
 
-    # ==========================================
-    # আরো দেখুন
-    # ==========================================
-
     if data == "next_page":
 
         context.user_data[
@@ -1501,10 +1370,6 @@ async def button_handler(
 
         return
 
-
-    # ==========================================
-    # Search Type
-    # ==========================================
 
     search_types = {
 
@@ -1549,6 +1414,45 @@ async def button_handler(
         }
 
     }
+
+
+    if data == "search_multi":
+
+        context.user_data["search_type"] = "multi"
+
+
+        text = (
+
+            "⚡ **Multi Search (AND Search)**\n\n"
+
+            "আপনি চাইলে নাম, পিতার নাম, মাতার নাম এবং জন্মতারিখ যেকোনো কম্বিনেশনে লিখে পাঠাতে পারেন।\n\n"
+
+            "📌 **ফরম্যাট:**\n"
+
+            "নাম: [আপনার নাম]\n"
+
+            "পিতা: [পিতার নাম]\n"
+
+            "মাতা: [মাতার নাম]\n"
+
+            "জন্ম: [01/01/2000]\n\n"
+
+            "💡 **উদাহরণ:**\n"
+
+            "নাম: রহিম\n"
+
+            "পিতা: করিম\n"
+
+            "জন্ম: 01/01/2000\n\n"
+
+            "*(যেকোনো ১টি বা একাধিক ফিল্ড একসাথে দিতে পারেন)*"
+
+        )
+
+
+        await query.edit_message_text(text, parse_mode="Markdown")
+
+        return
 
 
     if data in search_types:
@@ -1636,55 +1540,152 @@ async def search_handler(
         return
 
 
-    search_text = (
+    raw_text = update.message.text.strip()
 
-        update.message.text
+    search_type = context.user_data["search_type"]
 
-        .strip()
-
-    )
-
-
-    search_type = context.user_data[
-
-        "search_type"
-
-    ]
-
-
-    seat = context.user_data[
-
-        "seat"
-
-    ]
-
+    seat = context.user_data["seat"]
 
     info = SEAT_FILES[seat]
 
 
+    search_input = None
+
+
     # ==========================================
-    # জন্মতারিখ Format Check
+    # Multi Search Input Parsing
     # ==========================================
 
-    if search_type == "dob":
+    if search_type == "multi":
 
-        if not re.match(
+        parsed = {
 
-            r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$",
+            "name": "",
 
-            search_text
+            "father": "",
 
-        ):
+            "mother": "",
 
-            await update.message.reply_text(
+            "dob": ""
 
-                "⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন।\n\n"
+        }
 
-                "📌 উদাহরণ: 01/01/2000"
 
-            )
+        lines = raw_text.split("\n")
 
-            return
+
+        for line in lines:
+
+            if ":" in line:
+
+                key, val = line.split(":", 1)
+
+            elif "：" in line:
+
+                key, val = line.split("：", 1)
+
+            else:
+
+                continue
+
+
+            key = key.strip().lower()
+
+            val = val.strip()
+
+
+            if key in ["নাম", "name"]:
+
+                parsed["name"] = val
+
+            elif key in ["পিতা", "পিতার নাম", "father", "fathername"]:
+
+                parsed["father"] = val
+
+            elif key in ["মাতা", "মাতার নাম", "mother", "mothername"]:
+
+                parsed["mother"] = val
+
+            elif key in ["জন্ম", "জন্মতারিখ", "dob", "dateofbirth"]:
+
+                parsed["dob"] = val
+
+
+        non_empty = {k: v for k, v in parsed.items() if v}
+
+
+        if not non_empty:
+
+            if len(lines) == 1 and ":" not in raw_text and "：" not in raw_text:
+
+                parsed["name"] = raw_text
+
+                non_empty = {"name": raw_text}
+
+            else:
+
+                await update.message.reply_text(
+
+                    "⚠️ সঠিক ফরম্যাটে তথ্য দিন।\n\n"
+
+                    "📌 **উদাহরণ:**\n"
+
+                    "নাম: রহিম\n"
+
+                    "পিতা: করিম\n"
+
+                    "মাতা: রেহানা\n"
+
+                    "জন্ম: 01/01/2000",
+
+                    parse_mode="Markdown"
+
+                )
+
+                return
+
+
+        if len(non_empty) == 1:
+
+            single_key = list(non_empty.keys())[0]
+
+            search_type = single_key
+
+            search_input = non_empty[single_key]
+
+        else:
+
+            search_input = parsed
+
+
+    # ==========================================
+    # Single Search Validation
+    # ==========================================
+
+    else:
+
+        search_input = raw_text
+
+
+        if search_type == "dob":
+
+            if not re.match(
+
+                r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$",
+
+                search_input
+
+            ):
+
+                await update.message.reply_text(
+
+                    "⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন।\n\n"
+
+                    "📌 উদাহরণ: 01/01/2000"
+
+                )
+
+                return
 
 
     await update.message.reply_text(
@@ -1706,7 +1707,7 @@ async def search_handler(
 
         info["csv"],
 
-        search_text,
+        search_input,
 
         search_type
 
@@ -1869,10 +1870,6 @@ async def search_handler(
 
 def main():
 
-    # ==========================================
-    # Render Server
-    # ==========================================
-
     threading.Thread(
 
         target=run_web_server,
@@ -1884,14 +1881,10 @@ def main():
 
     print(
 
-        "🌐 Web Server চালু হয়েছে"
+        "🌐 Web Server चालू হয়েছে"
 
     )
 
-
-    # ==========================================
-    # Telegram Application
-    # ==========================================
 
     app = (
 
@@ -1906,10 +1899,6 @@ def main():
     )
 
 
-    # ==========================================
-    # /start
-    # ==========================================
-
     app.add_handler(
 
         CommandHandler(
@@ -1923,10 +1912,6 @@ def main():
     )
 
 
-    # ==========================================
-    # Button
-    # ==========================================
-
     app.add_handler(
 
         CallbackQueryHandler(
@@ -1937,10 +1922,6 @@ def main():
 
     )
 
-
-    # ==========================================
-    # Text Search
-    # ==========================================
 
     app.add_handler(
 
@@ -1959,14 +1940,10 @@ def main():
 
     print(
 
-        "🤖 Telegram Demo Search Bot চালু হয়েছে!"
+        "🤖 Telegram Demo Search Bot चालू হয়েছে!"
 
     )
 
-
-    # ==========================================
-    # Run
-    # ==========================================
 
     app.run_polling()
 
