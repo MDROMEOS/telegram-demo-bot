@@ -1,7 +1,6 @@
 import os
 import csv
 import zipfile
-import py7zr  # 7z ফাইল রিড করার জন্য
 import threading
 import io
 import re
@@ -64,14 +63,14 @@ BANGLA_MAP = {
     "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
     "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
     "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
-    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোখালী",
+    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
     "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
     "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
 }
 
 
 # =====================================================
-# 3. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (ZIP + 7Z)
+# 3. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (ZIP Only)
 # =====================================================
 
 SEAT_FILES = {}
@@ -82,16 +81,12 @@ def auto_load_zip_files():
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    archive_files = [
-        f for f in os.listdir(".") 
-        if f.startswith("voters_") and (f.endswith(".zip") or f.endswith(".7z"))
-    ]
+    zip_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".zip")]
 
-    for index, archive_name in enumerate(sorted(archive_files), start=1):
+    for index, zip_name in enumerate(sorted(zip_files), start=1):
         seat_key = f"auto_seat_{index}"
         
-        raw_name = archive_name.replace("voters_", "")
-        raw_name = re.sub(r'\.(zip|7z)$', '', raw_name)
+        raw_name = zip_name.replace("voters_", "").replace(".zip", "")
         parts = raw_name.split("_")
 
         division_raw = parts[0].lower() if len(parts) > 0 else "other"
@@ -106,7 +101,7 @@ def auto_load_zip_files():
             "name": seat_name,
             "division": division,
             "district": district,
-            "archive": archive_name,
+            "zip": zip_name,
         }
 
         if division not in DIVISIONS_MAP:
@@ -116,7 +111,7 @@ def auto_load_zip_files():
             
         DIVISIONS_MAP[division][district].append(seat_key)
 
-    print(f"✅ মোট {len(SEAT_FILES)} টি (ZIP/7Z) ফাইল লোড হয়েছে!")
+    print(f"✅ মোট {len(SEAT_FILES)} টি ZIP ফাইল লোড হয়েছে!")
 
 auto_load_zip_files()
 
@@ -145,152 +140,92 @@ def run_web_server():
 # =====================================================
 
 def normalize(text):
-    if not text:
-        return ""
     return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
 # =====================================================
-# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Debug Enabled)
+# 6. ZIP ফাইল থেকে CSV সার্চ
 # =====================================================
 
-def search_archive(archive_path, search_input, search_type):
-    if not os.path.exists(archive_path):
-        print(f"❌ File not found: {archive_path}")
+def search_zip(zip_path, search_input, search_type):
+    if not os.path.exists(zip_path):
         return []
 
     results = []
     column_mappings = {
-        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি", "sl", "slno", "voter"],
-        "name": ["name", "fullname", "नाम", "নাম", "votername"],
-        "father": ["father", "fathername", "father_name", "পিতা", "পিতার নাম", "fathersname"],
-        "mother": ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম", "mothersname"],
-        "dob": ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ", "birth"]
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
+        "name": ["name", "fullname", "নাম"],
+        "father": ["father", "fathername", "পিতা"],
+        "mother": ["mother", "mothername", "মাতা"],
+        "dob": ["dob", "dateofbirth", "birthdate", "জন্ম"]
     }
 
     try:
-        file_bytes = None
-        
-        if archive_path.endswith(".7z"):
-            with py7zr.SevenZipFile(archive_path, mode='r') as z:
-                all_files = z.getnames()
-                csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
-                
-                if csv_file_name:
-                    extracted = z.readall()
-                    # 7z Extraction Check
-                    for k, v in extracted.items():
-                        if k.lower().endswith(".csv"):
-                            file_bytes = v.read()
-                            break
+        with zipfile.ZipFile(zip_path, "r") as z:
+            all_files = z.namelist()
+            csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
 
-        elif archive_path.endswith(".zip"):
-            with zipfile.ZipFile(archive_path, "r") as z:
-                all_files = z.namelist()
-                csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
-                if csv_file_name:
-                    with z.open(csv_file_name) as file:
-                        file_bytes = file.read()
+            if not csv_file_name:
+                return []
 
-        if file_bytes:
-            # Decode Logic
-            decoded_text = ""
-            for enc in ['utf-8-sig', 'utf-8', 'utf-16', 'latin-1', 'cp1252']:
-                try:
-                    decoded_text = file_bytes.decode(enc)
-                    break
-                except UnicodeDecodeError:
-                    continue
+            with z.open(csv_file_name) as file:
+                text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
+                reader = csv.DictReader(text_file)
 
-            text_file = io.StringIO(decoded_text)
-            
-            # Auto Delimiter Detect (Comma or Tab)
-            sample = decoded_text[:2000]
-            delimiter = '\t' if '\t' in sample and sample.count('\t') > sample.count(',') else ','
-            
-            reader = csv.DictReader(text_file, delimiter=delimiter)
-            
-            # Print Column Names in Console for Debugging
-            print(f"📌 {archive_path} এর কলামসমূহ:", reader.fieldnames)
-            
-            results = process_csv_search(reader, search_input, search_type, column_mappings)
+                for row in reader:
+                    normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
+
+                    if search_type == "multi":
+                        is_match = True
+                        for field, search_val in search_input.items():
+                            if not search_val:
+                                continue
+
+                            possible_cols = column_mappings.get(field, [])
+                            found_value = ""
+
+                            for col in possible_cols:
+                                norm_col = normalize(col)
+                                if norm_col in normalized_row:
+                                    found_value = normalized_row[norm_col]
+                                    break
+
+                            s_val = str(search_val).strip().lower()
+                            f_val = str(found_value).strip().lower()
+
+                            if field == "dob":
+                                s_val = s_val.replace("-", "/").replace(".", "/")
+                                f_val = f_val.replace("-", "/").replace(".", "/")
+
+                            if s_val not in f_val:
+                                is_match = False
+                                break
+
+                        if is_match:
+                            results.append(dict(row))
+
+                    else:
+                        search_columns = column_mappings.get(search_type, [])
+                        found_value = ""
+
+                        for column in search_columns:
+                            column_name = normalize(column)
+                            if column_name in normalized_row:
+                                found_value = normalized_row[column_name]
+                                break
+
+                        search_value = str(search_input).strip().lower()
+                        found_value_normalized = str(found_value).strip().lower()
+
+                        if search_type == "dob":
+                            search_value = search_value.replace("-", "/").replace(".", "/")
+                            found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+
+                        if search_value in found_value_normalized:
+                            results.append(dict(row))
 
     except Exception as e:
-        print(f"❌ Archive Reading Error ({archive_path}):", e)
-
-    return results
-
-
-def process_csv_search(reader, search_input, search_type, column_mappings):
-    results = []
-    
-    if not reader.fieldnames:
-        print("⚠️ CSV কলাম বা হেডার খালি পাওয়া গেছে!")
-        return []
-
-    for row in reader:
-        # Check empty rows
-        if not any(row.values()):
-            continue
-
-        normalized_row = {normalize(k): str(v or "").strip() for k, v in row.items() if k}
-
-        if search_type == "multi":
-            is_match = True
-            for field, search_val in search_input.items():
-                if not search_val:
-                    continue
-
-                possible_cols = column_mappings.get(field, [])
-                found_value = ""
-
-                for col in possible_cols:
-                    norm_col = normalize(col)
-                    if norm_col in normalized_row:
-                        found_value = normalized_row[norm_col]
-                        break
-
-                s_val = str(search_val).strip().lower()
-                f_val = str(found_value).strip().lower()
-
-                if field == "dob":
-                    s_val = re.sub(r'[\.\-\/]', '', s_val)
-                    f_val = re.sub(r'[\.\-\/]', '', f_val)
-
-                if s_val not in f_val:
-                    is_match = False
-                    break
-
-            if is_match:
-                results.append(dict(row))
-
-        else:
-            search_columns = column_mappings.get(search_type, [])
-            found_value = ""
-
-            for column in search_columns:
-                column_name = normalize(column)
-                if column_name in normalized_row:
-                    found_value = normalized_row[column_name]
-                    break
-
-            # Fallback: Search all columns if column map missing
-            if not found_value and search_type == "name":
-                for k, v in normalized_row.items():
-                    if str(search_input).strip().lower() in v.lower():
-                        results.append(dict(row))
-                        break
-                continue
-
-            search_value = str(search_input).strip().lower()
-            found_value_normalized = str(found_value).strip().lower()
-
-            if search_type == "dob":
-                search_value = re.sub(r'[\.\-\/]', '', search_value)
-                found_value_normalized = re.sub(r'[\.\-\/]', '', found_value_normalized)
-
-            if search_value and search_value in found_value_normalized:
-                results.append(dict(row))
+        print("Zip Search Error:", e)
 
     return results
 
@@ -300,7 +235,7 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
 # =====================================================
 
 def get_value(row, names):
-    normalized_row = {normalize(k): v for k, v in row.items() if k}
+    normalized_row = {normalize(k): v for k, v in row.items()}
     for name in names:
         value = normalized_row.get(normalize(name))
         if value is not None:
@@ -315,12 +250,12 @@ def get_value(row, names):
 # =====================================================
 
 def make_report(row, seat_name, division, district):
-    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি", "sl", "slno", "voter"])
+    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id"])
     serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
-    name = get_value(row, ["name", "fullname", "नाम", "নাম", "votername"])
-    father = get_value(row, ["father", "fathername", "father_name", "পিতা", "পিতার নাম", "fathersname"])
-    mother = get_value(row, ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম", "mothersname"])
-    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ", "birth"])
+    name = get_value(row, ["name", "fullname", "নাম"])
+    father = get_value(row, ["father", "fathername", "পিতা"])
+    mother = get_value(row, ["mother", "mothername", "মাতা"])
+    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "জন্ম"])
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
     address = get_value(row, ["address", "ঠিকানা"])
@@ -385,7 +320,7 @@ async def show_division_menu(query_or_message):
     divisions = list(DIVISIONS_MAP.keys())
 
     if not divisions:
-        text = "⚠️ কোনো voters_*.zip বা voters_*.7z ফাইল পাওয়া যায়নি!"
+        text = "⚠️ কোনো voters_*.zip ফাইল পাওয়া যায়নি!"
         if hasattr(query_or_message, 'edit_message_text'):
             await safe_edit_message(query_or_message, text)
         else:
@@ -660,10 +595,14 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         search_input = raw_text
+        if search_type == "dob":
+            if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
+                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
+                return
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
-    results = search_archive(info["archive"], search_input, search_type)
+    results = search_zip(info["zip"], search_input, search_type)
 
     if not results:
         keyboard = [
@@ -699,7 +638,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("🌐 Web Server चालू হয়েছে")
+    print("🌐 Web Server চালু হয়েছে")
 
     app = Application.builder().token(TOKEN).build()
 
