@@ -28,7 +28,7 @@ from telegram.error import BadRequest
 # 1. Telegram Bot Token
 # =====================================================
 
-TOKEN = "8757771538:AAFt6VmtbOkFJ_0QSxpAWW8cVX8VwTUfC_E"
+TOKEN = "8757771538:AAFhe_TDcM1Ffg5MJ2bsCGyJUXOr5QlNH-8"
 
 
 # =====================================================
