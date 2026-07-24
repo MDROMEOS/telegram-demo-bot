@@ -22,6 +22,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram.error import BadRequest
 
 
 # =====================================================
@@ -46,7 +47,7 @@ BANGLA_MAP = {
     "sylhet": "সিলেট বিভাগ",
     "chattogram": "চট্টগ্রাম বিভাগ",
 
-    # জেলাসমূহ (প্রয়োজন অনুযায়ী আরও যোগ করা যাবে)
+    # জেলাসমূহ
     "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
     "nilphamari": "নীলফামারী", "lalmonirhat": "লালমনিরহাট", "kurigram": "কুড়িগ্রাম",
     "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া",
@@ -81,7 +82,6 @@ def auto_load_zip_files():
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    # .zip এবং .7z উভয় ধরনের ফাইল স্ক্যান করবে
     archive_files = [
         f for f in os.listdir(".") 
         if f.startswith("voters_") and (f.endswith(".zip") or f.endswith(".7z"))
@@ -90,7 +90,6 @@ def auto_load_zip_files():
     for index, archive_name in enumerate(sorted(archive_files), start=1):
         seat_key = f"auto_seat_{index}"
         
-        # এক্সটেনশন মুছে ফরম্যাট আলাদা করা
         raw_name = archive_name.replace("voters_", "")
         raw_name = re.sub(r'\.(zip|7z)$', '', raw_name)
         parts = raw_name.split("_")
@@ -119,7 +118,6 @@ def auto_load_zip_files():
 
     print(f"✅ মোট {len(SEAT_FILES)} টি (ZIP/7Z) ফাইল লোড হয়েছে!")
 
-# প্রথমবার অটোমেটিক ফাইল লোড
 auto_load_zip_files()
 
 
@@ -151,7 +149,7 @@ def normalize(text):
 
 
 # =====================================================
-# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ
+# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Fixed for 7z)
 # =====================================================
 
 def search_archive(archive_path, search_input, search_type):
@@ -168,18 +166,19 @@ def search_archive(archive_path, search_input, search_type):
     }
 
     try:
-        # .7z ফাইলের জন্য
+        # .7z ফাইলের জন্য সঠিক এক্সট্রাকশন পদ্ধতি
         if archive_path.endswith(".7z"):
             with py7zr.SevenZipFile(archive_path, mode='r') as z:
                 all_files = z.getnames()
                 csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
                 
                 if csv_file_name:
-                    extracted = z.read([csv_file_name])
-                    file_bytes = extracted[csv_file_name]
-                    text_file = io.TextIOWrapper(file_bytes, encoding="utf-8-sig", errors="replace", newline="")
-                    reader = csv.DictReader(text_file)
-                    results = process_csv_search(reader, search_input, search_type, column_mappings)
+                    extracted = z.readall()
+                    if csv_file_name in extracted:
+                        file_bytes = extracted[csv_file_name].read()
+                        text_file = io.TextIOWrapper(io.BytesIO(file_bytes), encoding="utf-8-sig", errors="replace", newline="")
+                        reader = csv.DictReader(text_file)
+                        results = process_csv_search(reader, search_input, search_type, column_mappings)
 
         # .zip ফাইলের জন্য
         elif archive_path.endswith(".zip"):
@@ -326,6 +325,17 @@ def make_report(row, seat_name, division, district):
 ━━━━━━━━━━━━━━━━━━━━"""
 
 
+# Helper for Safe Edit Message
+async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
+    try:
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+    except BadRequest as e:
+        if "Message is not modified" in str(e):
+            pass
+        else:
+            raise e
+
+
 # =====================================================
 # 9. ডাইনামিক মেনু ফাংশনসমূহ
 # =====================================================
@@ -337,7 +347,7 @@ async def show_division_menu(query_or_message):
     if not divisions:
         text = "⚠️ কোনো voters_*.zip বা voters_*.7z ফাইল পাওয়া যায়নি!"
         if hasattr(query_or_message, 'edit_message_text'):
-            await query_or_message.edit_message_text(text)
+            await safe_edit_message(query_or_message, text)
         else:
             await query_or_message.reply_text(text)
         return
@@ -352,7 +362,7 @@ async def show_division_menu(query_or_message):
     text = "🏠 Demo Search Bot\n\n🌍 একটি বিভাগ নির্বাচন করুন:"
 
     if hasattr(query_or_message, 'edit_message_text'):
-        await query_or_message.edit_message_text(text, reply_markup=reply_markup)
+        await safe_edit_message(query_or_message, text, reply_markup=reply_markup)
     else:
         await query_or_message.reply_text(text, reply_markup=reply_markup)
 
@@ -370,7 +380,8 @@ async def show_district_menu(query, context):
 
     keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_division")])
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         f"🌍 বিভাগ: {division}\n\n🗺 এখন একটি জেলা নির্বাচন করুন:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -395,7 +406,8 @@ async def show_seat_menu(query, context):
 
     keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_district")])
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         f"🌍 বিভাগ: {division}\n🗺 জেলা: {district}\n\n🏛 এখন একটি আসন নির্বাচন করুন:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -421,7 +433,7 @@ async def show_search_menu(query_or_message, context):
     )
 
     if hasattr(query_or_message, 'edit_message_text'):
-        await query_or_message.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await safe_edit_message(query_or_message, text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await query_or_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -536,7 +548,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "মাতা: [মাতার নাম]\n"
             "জন্ম: [01/01/2000]"
         )
-        await query.edit_message_text(text, parse_mode="Markdown")
+        await safe_edit_message(query, text, parse_mode="Markdown")
         return
 
     if data in search_types:
@@ -546,7 +558,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "✅ 🎂 Demo জন্মতারিখ দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n📌 উদাহরণ: 01/01/2000"
         else:
             text = f"✅ {info['title']} দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n✏️ এখন আপনার {info['title']} লিখে পাঠান।"
-        await query.edit_message_text(text)
+        await safe_edit_message(query, text)
 
 
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
