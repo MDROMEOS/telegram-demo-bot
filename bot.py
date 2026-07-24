@@ -561,4 +561,86 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if key in ["নাম", "name"]:
                 parsed["name"] = val
-            elif key in ["পিতা", "পিত
+            elif key in ["পিতা", "পিতার নাম", "father", "fathername"]:
+                parsed["father"] = val
+            elif key in ["মাতা", "মাতার নাম", "mother", "mothername"]:
+                parsed["mother"] = val
+            elif key in ["জন্ম", "জন্মতারিখ", "dob", "dateofbirth"]:
+                parsed["dob"] = val
+
+        non_empty = {k: v for k, v in parsed.items() if v}
+
+        if not non_empty:
+            if len(lines) == 1 and ":" not in raw_text and "：" not in raw_text:
+                parsed["name"] = raw_text
+                non_empty = {"name": raw_text}
+            else:
+                await update.message.reply_text("⚠️ সঠিক ফরম্যাটে তথ্য দিন।")
+                return
+
+        if len(non_empty) == 1:
+            single_key = list(non_empty.keys())[0]
+            search_type = single_key
+            search_input = non_empty[single_key]
+        else:
+            search_input = parsed
+
+    else:
+        search_input = raw_text
+        if search_type == "dob":
+            if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
+                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
+                return
+
+    await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
+
+    results = search_csv(info["file"], search_input, search_type)
+
+    if not results:
+        keyboard = [
+            [InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")],
+            [InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")]
+        ]
+        await update.message.reply_text("❌ কোনো Demo Data পাওয়া যায়নি।\n\n🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    context.user_data["results"] = results
+    context.user_data["page"] = 0
+
+    first_results = results[:10]
+
+    for row in first_results:
+        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
+        await update.message.reply_text(report)
+
+    keyboard = []
+    if len(results) > 10:
+        keyboard.append([InlineKeyboardButton("➡️ আরো দেখুন", callback_data="next_page")])
+
+    keyboard.append([InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")])
+    keyboard.append([InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")])
+
+    summary_text = f"📄 মোট ফলাফল: {len(results)} টি\n\n📑 প্রথম {min(10, len(results))} টি রিপোর্ট দেখানো হয়েছে।"
+    await update.message.reply_text(summary_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# =====================================================
+# 7. Main Function
+# =====================================================
+
+def main():
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("🌐 Web Server চালু হয়েছে")
+
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
+
+    print("🤖 Telegram Demo Search Bot चालू হয়েছে!")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
