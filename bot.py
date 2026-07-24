@@ -31,62 +31,57 @@ TOKEN = "8757771538:AAFt6VmtbOkFJ_0QSxpAWW8cVX8VwTUfC_E"
 
 
 # =====================================================
-# 2. আপনার ZIP ফাইলের তথ্য (পূর্বের ও নতুন ডাটা একসাথে)
+# 2. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (Auto Detector)
 # =====================================================
 
-SEAT_FILES = {
+# এই ডিকশনারিগুলো অটোমেটিক ডায়নামিকভাবে তৈরি হবে
+SEAT_FILES = {}
+DIVISIONS_MAP = {}  # { 'চট্টগ্রাম বিভাগ': { 'লক্ষ্মীপুর': ['seat_key_1', 'seat_key_2'] } }
 
-    # --- চট্টগ্রাম বিভাগ (পূর্বের ডাটা) ---
-    "seat_1": {
-        "name": "আসন-১",
-        "division": "চট্টগ্রাম বিভাগ",
-        "district": "লক্ষ্মীপুর",
-        "zip": "voters_nfmhzgip.zip",
-        "csv": "voters_nfmhzgip.csv",
-    },
+def auto_load_zip_files():
+    global SEAT_FILES, DIVISIONS_MAP
+    SEAT_FILES.clear()
+    DIVISIONS_MAP.clear()
 
-    "seat_2": {
-        "name": "আসন-২",
-        "division": "চট্টগ্রাম বিভাগ",
-        "district": "লক্ষ্মীপুর",
-        "zip": "voters_h05css89.zip",
-        "csv": "voters_h05css89.csv",
-    },
+    # আপনার প্রজেক্টের সব voters_*.zip ফাইল খুঁজে বের করবে
+    zip_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".zip")]
 
-    "seat_3": {
-        "name": "আসন-৩",
-        "division": "চট্টগ্রাম বিভাগ",
-        "district": "লক্ষ্মীপুর",
-        "zip": "voters_p_8guvlz.zip",
-        "csv": "voters_p_8guvlz.csv",
-    },
+    for index, zip_name in enumerate(sorted(zip_files), start=1):
+        seat_key = f"auto_seat_{index}"
+        
+        # ফাইল নাম ফরম্যাট: voters_div_dist_seat.zip
+        # যেমন: voters_chattogram_lakshmipur_seat1.zip
+        raw_name = zip_name.replace("voters_", "").replace(".zip", "")
+        parts = raw_name.split("_")
 
-    "seat_4": {
-        "name": "আসন-৪",
-        "division": "চট্টগ্রাম বিভাগ",
-        "district": "লক্ষ্মীপুর",
-        "zip": "voters_d_evylnn.zip",
-        "csv": "voters_d_evylnn.csv",
-    },
+        # ডিফল্ট ভ্যালু সেট করে রাখা
+        division = parts[0].capitalize() if len(parts) > 0 else "অন্যান্য"
+        district = parts[1].capitalize() if len(parts) > 1 else "সাধারণ"
+        seat_name = f"আসন-{parts[2]}" if len(parts) > 2 else f"আসন-{index}"
 
-    # --- লালমনিরহাট বিভাগ (নতুন ডাটা) ---
-    "lal_seat_1": {
-        "name": "আসন-১",
-        "division": "লালমনিরহাট বিভাগ",
-        "district": "লালমনিরহাট",
-        "zip": "voters_q_hde8oz.zip",
-        "csv": "voters_q_hde8oz.csv",
-    },
+        csv_inside_expected = zip_name.replace(".zip", ".csv")
 
-    "lal_seat_3": {
-        "name": "আসন-৩",
-        "division": "লালমনিরহাট বিভাগ",
-        "district": "লালমনিরহাট",
-        "zip": "voters_e7arvkn5.zip",
-        "csv": "voters_e7arvkn5.csv",
-    },
+        # SEAT_FILES-এ ডাটা রাখা
+        SEAT_FILES[seat_key] = {
+            "name": seat_name,
+            "division": division,
+            "district": district,
+            "zip": zip_name,
+            "csv": csv_inside_expected,
+        }
 
-}
+        # বিভাগ এবং জেলা অনুযায়ী সাজিয়ে রাখা
+        if division not in DIVISIONS_MAP:
+            DIVISIONS_MAP[division] = {}
+        if district not in DIVISIONS_MAP[division]:
+            DIVISIONS_MAP[division][district] = []
+            
+        DIVISIONS_MAP[division][district].append(seat_key)
+
+    print(f"✅ মোট {len(SEAT_FILES)} টি জিপ ফাইল অটোমেটিক ডিটেক্ট করা হয়েছে!")
+
+# বট স্টার্ট হওয়ার সাথে সাথে ফাইল লোড করবে
+auto_load_zip_files()
 
 
 # =====================================================
@@ -95,29 +90,17 @@ SEAT_FILES = {
 
 web_app = Flask(__name__)
 
-
 @web_app.route("/")
 def home():
     return "Telegram Demo Search Bot is running!"
-
 
 @web_app.route("/health")
 def health():
     return "OK"
 
-
 def run_web_server():
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
-
-    web_app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
 
 
 # =====================================================
@@ -125,40 +108,25 @@ def run_web_server():
 # =====================================================
 
 def normalize(text):
-    return (
-        str(text)
-        .strip()
-        .lower()
-        .replace(" ", "")
-        .replace("_", "")
-        .replace("-", "")
-    )
+    return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
 # =====================================================
 # 5. ZIP-এর ভিতরে CSV খোঁজা
 # =====================================================
 
-def find_csv_in_zip(
-    zip_path,
-    expected_csv
-):
+def find_csv_in_zip(zip_path, expected_csv):
     if not os.path.exists(zip_path):
         return None
 
     try:
-        with zipfile.ZipFile(
-            zip_path,
-            "r"
-        ) as z:
+        with zipfile.ZipFile(zip_path, "r") as z:
             for name in z.namelist():
                 if name.endswith(expected_csv):
                     return name
-
             for name in z.namelist():
                 if name.lower().endswith(".csv"):
                     return name
-
     except Exception as e:
         print("ZIP Error:", e)
 
@@ -169,23 +137,14 @@ def find_csv_in_zip(
 # 6. CSV Search (Single & Multi AND Search)
 # =====================================================
 
-def search_zip(
-    zip_path,
-    csv_name,
-    search_input,
-    search_type
-):
-    csv_inside = find_csv_in_zip(
-        zip_path,
-        csv_name
-    )
+def search_zip(zip_path, csv_name, search_input, search_type):
+    csv_inside = find_csv_in_zip(zip_path, csv_name)
 
     if not csv_inside:
         print("CSV পাওয়া যায়নি:", csv_name)
         return []
 
     results = []
-
     column_mappings = {
         "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
         "name": ["name", "fullname", "নাম"],
@@ -197,24 +156,14 @@ def search_zip(
     try:
         with zipfile.ZipFile(zip_path, "r") as z:
             with z.open(csv_inside) as file:
-                text_file = io.TextIOWrapper(
-                    file,
-                    encoding="utf-8-sig",
-                    errors="replace",
-                    newline=""
-                )
-
+                text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
                 reader = csv.DictReader(text_file)
 
                 for row in reader:
-                    normalized_row = {
-                        normalize(k): str(v or "")
-                        for k, v in row.items()
-                    }
+                    normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
 
                     if search_type == "multi":
                         is_match = True
-
                         for field, search_val in search_input.items():
                             if not search_val:
                                 continue
@@ -273,18 +222,13 @@ def search_zip(
 # =====================================================
 
 def get_value(row, names):
-    normalized_row = {
-        normalize(k): v
-        for k, v in row.items()
-    }
-
+    normalized_row = {normalize(k): v for k, v in row.items()}
     for name in names:
         value = normalized_row.get(normalize(name))
         if value is not None:
             value = str(value).strip()
             if value:
                 return value
-
     return "N/A"
 
 
@@ -344,24 +288,27 @@ def make_report(row, seat_name, division, district):
 
 
 # =====================================================
-# 9. বিভাগ নির্বাচন (সবগুলো বিভাগ একসাথে দেখাবে)
+# 9. ডাইনামিক বিভাগ নির্বাচন
 # =====================================================
 
 async def show_division_menu(query_or_message):
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "🌍 চট্টগ্রাম বিভাগ",
-                callback_data="division_chattogram"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🌍 লালমনিরহাট বিভাগ",
-                callback_data="division_lalmonirhat"
-            )
-        ]
-    ]
+    keyboard = []
+    divisions = list(DIVISIONS_MAP.keys())
+
+    if not divisions:
+        text = "⚠️ কোনো voters_*.zip ফাইল পাওয়া যায়নি! ফাইল আপলোড করে নিশ্চিত করুন।"
+        if hasattr(query_or_message, 'edit_message_text'):
+            await query_or_message.edit_message_text(text)
+        else:
+            await query_or_message.reply_text(text)
+        return
+
+    # ২ টি করে বিভাগ একসাথে বোতামে দেখাবে
+    for i in range(0, len(divisions), 2):
+        row = [InlineKeyboardButton(f"🌍 {divisions[i]}", callback_data=f"div_{divisions[i]}")]
+        if i + 1 < len(divisions):
+            row.append(InlineKeyboardButton(f"🌍 {divisions[i+1]}", callback_data=f"div_{divisions[i+1]}"))
+        keyboard.append(row)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = "🏠 Demo Search Bot\n\n🌍 একটি বিভাগ নির্বাচন করুন:"
@@ -373,91 +320,53 @@ async def show_division_menu(query_or_message):
 
 
 # =====================================================
-# 10. জেলা নির্বাচন
+# 10. ডাইনামিক জেলা নির্বাচন
 # =====================================================
 
 async def show_district_menu(query, context):
-    division = context.user_data.get("division", "চট্টগ্রাম বিভাগ")
+    division = context.user_data.get("division")
+    districts = list(DIVISIONS_MAP.get(division, {}).keys())
 
-    if division == "চট্টগ্রাম বিভাগ":
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🗺 লক্ষ্মীপুর",
-                    callback_data="district_lakshmipur"
-                )
-            ]
-        ]
-    else:
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🗺 লালমনিরহাট",
-                    callback_data="district_lalmonirhat"
-                )
-            ]
-        ]
+    keyboard = []
+    for i in range(0, len(districts), 2):
+        row = [InlineKeyboardButton(f"🗺 {districts[i]}", callback_data=f"dis_{districts[i]}")]
+        if i + 1 < len(districts):
+            row.append(InlineKeyboardButton(f"🗺 {districts[i+1]}", callback_data=f"dis_{districts[i+1]}"))
+        keyboard.append(row)
 
     keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_division")])
 
     await query.edit_message_text(
-        f"🌍 বিভাগ: {division}\n\n"
-        "🗺 এখন একটি জেলা নির্বাচন করুন:",
+        f"🌍 বিভাগ: {division}\n\n🗺 এখন একটি জেলা নির্বাচন করুন:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 # =====================================================
-# 11. আসন নির্বাচন
+# 11. ডাইনামিক আসন নির্বাচন
 # =====================================================
 
 async def show_seat_menu(query, context):
-    district = context.user_data.get("district", "লক্ষ্মীপুর")
-    division = context.user_data.get("division", "চট্টগ্রাম বিভাগ")
+    division = context.user_data.get("division")
+    district = context.user_data.get("district")
 
-    if district == "লক্ষ্মীপুর":
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🏛 আসন-১",
-                    callback_data="seat_1"
-                ),
-                InlineKeyboardButton(
-                    "🏛 আসন-২",
-                    callback_data="seat_2"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🏛 আসন-৩",
-                    callback_data="seat_3"
-                ),
-                InlineKeyboardButton(
-                    "🏛 আসন-৪",
-                    callback_data="seat_4"
-                )
-            ]
-        ]
-    else:
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🏛 আসন-১",
-                    callback_data="lal_seat_1"
-                ),
-                InlineKeyboardButton(
-                    "🏛 আসন-৩",
-                    callback_data="lal_seat_3"
-                )
-            ]
-        ]
+    seat_keys = DIVISIONS_MAP.get(division, {}).get(district, [])
+
+    keyboard = []
+    for i in range(0, len(seat_keys), 2):
+        seat_1 = SEAT_FILES[seat_keys[i]]
+        row = [InlineKeyboardButton(f"🏛 {seat_1['name']}", callback_data=seat_keys[i])]
+        
+        if i + 1 < len(seat_keys):
+            seat_2 = SEAT_FILES[seat_keys[i+1]]
+            row.append(InlineKeyboardButton(f"🏛 {seat_2['name']}", callback_data=seat_keys[i+1]))
+            
+        keyboard.append(row)
 
     keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_district")])
 
     await query.edit_message_text(
-        f"🌍 বিভাগ: {division}\n"
-        f"🗺 জেলা: {district}\n\n"
-        "🏛 এখন একটি আসন নির্বাচন করুন:",
+        f"🌍 বিভাগ: {division}\n🗺 জেলা: {district}\n\n🏛 এখন একটি আসন নির্বাচন করুন:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -467,54 +376,21 @@ async def show_seat_menu(query, context):
 # =====================================================
 
 async def show_search_menu(query_or_message, context):
-    seat = context.user_data.get("seat", "seat_1")
-    info = SEAT_FILES.get(seat, SEAT_FILES["seat_1"])
+    seat = context.user_data.get("seat")
+    info = SEAT_FILES.get(seat, {})
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                "⚡ Multi Search (AND Search)",
-                callback_data="search_multi"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🆔 Demo ID",
-                callback_data="search_demo_id"
-            ),
-            InlineKeyboardButton(
-                "👤 Demo নাম",
-                callback_data="search_name"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "👨 Demo পিতার নাম",
-                callback_data="search_father"
-            ),
-            InlineKeyboardButton(
-                "👩 Demo মাতার নাম",
-                callback_data="search_mother"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🎂 Demo জন্মতারিখ",
-                callback_data="search_dob"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 আসন পরিবর্তন",
-                callback_data="back_seat"
-            )
-        ]
+        [InlineKeyboardButton("⚡ Multi Search (AND Search)", callback_data="search_multi")],
+        [InlineKeyboardButton("🆔 Demo ID", callback_data="search_demo_id"), InlineKeyboardButton("👤 Demo নাম", callback_data="search_name")],
+        [InlineKeyboardButton("👨 Demo পিতার নাম", callback_data="search_father"), InlineKeyboardButton("👩 Demo মাতার নাম", callback_data="search_mother")],
+        [InlineKeyboardButton("🎂 Demo জন্মতারিখ", callback_data="search_dob")],
+        [InlineKeyboardButton("🔙 আসন পরিবর্তন", callback_data="back_seat")]
     ]
 
     text = (
-        f"🌍 বিভাগ: {info['division']}\n"
-        f"🗺 জেলা: {info['district']}\n"
-        f"🏛 আসন: {info['name']}\n\n"
+        f"🌍 বিভাগ: {info.get('division', 'N/A')}\n"
+        f"🗺 জেলা: {info.get('district', 'N/A')}\n"
+        f"🏛 আসন: {info.get('name', 'N/A')}\n\n"
         "🔎 কোন তথ্য দিয়ে সার্চ করতে চান?"
     )
 
@@ -525,23 +401,24 @@ async def show_search_menu(query_or_message, context):
 
 
 # =====================================================
-# 13. /start (সরাসরি দুটি বিভাগ বাটন দেখাবে)
+# 13. /start
 # =====================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    auto_load_zip_files()  # প্রতিবার স্টার্ট দিলে নতুন আপলোড করা ফাইল লোড করে নেবে
     await show_division_menu(update.message)
 
 
 # =====================================================
-# 14. রিপোর্ট পাঠানো (সংশোধিত নেভিগেশন বাটন সহ)
+# 14. রিপোর্ট পাঠানো
 # =====================================================
 
 async def send_page(query, context):
     results = context.user_data.get("results", [])
     page = context.user_data.get("page", 0)
-    seat = context.user_data.get("seat", "seat_1")
-    info = SEAT_FILES.get(seat, SEAT_FILES["seat_1"])
+    seat = context.user_data.get("seat")
+    info = SEAT_FILES.get(seat, {})
 
     per_page = 10
     start_index = page * per_page
@@ -549,16 +426,10 @@ async def send_page(query, context):
     page_results = results[start_index:end_index]
 
     for row in page_results:
-        report = make_report(
-            row,
-            info["name"],
-            info["division"],
-            info["district"]
-        )
+        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
         await query.message.reply_text(report)
 
     keyboard = []
-
     if end_index < len(results):
         keyboard.append([InlineKeyboardButton("➡️ আরো দেখুন", callback_data="next_page")])
 
@@ -566,8 +437,7 @@ async def send_page(query, context):
     keyboard.append([InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")])
 
     await query.message.reply_text(
-        f"📄 মোট ফলাফল: {len(results)} টি\n"
-        f"📑 দেখানো হয়েছে: {start_index + 1} - {min(end_index, len(results))}",
+        f"📄 মোট ফলাফল: {len(results)} টি\n📑 দেখানো হয়েছে: {start_index + 1} - {min(end_index, len(results))}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -587,23 +457,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_division_menu(query)
         return
 
-    if data == "division_chattogram":
-        context.user_data["division"] = "চট্টগ্রাম বিভাগ"
+    if data.startswith("div_"):
+        div_name = data.replace("div_", "")
+        context.user_data["division"] = div_name
         await show_district_menu(query, context)
         return
 
-    if data == "division_lalmonirhat":
-        context.user_data["division"] = "লালমনিরহাট বিভাগ"
-        await show_district_menu(query, context)
-        return
-
-    if data == "district_lakshmipur":
-        context.user_data["district"] = "লক্ষ্মীপুর"
-        await show_seat_menu(query, context)
-        return
-
-    if data == "district_lalmonirhat":
-        context.user_data["district"] = "লালমনিরহাট"
+    if data.startswith("dis_"):
+        dis_name = data.replace("dis_", "")
+        context.user_data["district"] = dis_name
         await show_seat_menu(query, context)
         return
 
@@ -647,7 +509,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "search_multi":
         context.user_data["search_type"] = "multi"
-
         text = (
             "⚡ **Multi Search (AND Search)**\n\n"
             "আপনি চাইলে নাম, পিতার নাম, মাতার নাম এবং জন্মতারিখ যেকোনো কম্বিনেশনে লিখে পাঠাতে পারেন।\n\n"
@@ -656,32 +517,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "পিতা: [পিতার নাম]\n"
             "মাতা: [মাতার নাম]\n"
             "জন্ম: [01/01/2000]\n\n"
-            "💡 **উদাহরণ:**\n"
-            "নাম: রহিম\n"
-            "পিতা: করিম\n"
-            "জন্ম: 01/01/2000\n\n"
             "*(যেকোনো ১টি বা একাধিক ফিল্ড একসাথে দিতে পারেন)*"
         )
-
         await query.edit_message_text(text, parse_mode="Markdown")
         return
 
     if data in search_types:
         info = search_types[data]
         context.user_data["search_type"] = info["type"]
-
         if info["type"] == "dob":
-            text = (
-                "✅ 🎂 Demo জন্মতারিখ দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n"
-                "✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n"
-                "📌 উদাহরণ: 01/01/2000"
-            )
+            text = "✅ 🎂 Demo জন্মতারিখ দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n📌 উদাহরণ: 01/01/2000"
         else:
-            text = (
-                f"✅ {info['title']} দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n"
-                f"✏️ এখন আপনার {info['title']} লিখে পাঠান।"
-            )
-
+            text = f"✅ {info['title']} দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n✏️ এখন আপনার {info['title']} লিখে পাঠান।"
         await query.edit_message_text(text)
 
 
@@ -701,7 +548,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_text = update.message.text.strip()
     search_type = context.user_data["search_type"]
     seat = context.user_data["seat"]
-    info = SEAT_FILES.get(seat, SEAT_FILES["seat_1"])
+    info = SEAT_FILES.get(seat, {})
 
     search_input = None
 
@@ -736,15 +583,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parsed["name"] = raw_text
                 non_empty = {"name": raw_text}
             else:
-                await update.message.reply_text(
-                    "⚠️ সঠিক ফরম্যাটে তথ্য দিন।\n\n"
-                    "📌 **উদাহরণ:**\n"
-                    "নাম: রহিম\n"
-                    "পিতা: করিম\n"
-                    "মাতা: রেহানা\n"
-                    "জন্ম: 01/01/2000",
-                    parse_mode="Markdown"
-                )
+                await update.message.reply_text("⚠️ সঠিক ফরম্যাটে তথ্য দিন।")
                 return
 
         if len(non_empty) == 1:
@@ -756,34 +595,21 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         search_input = raw_text
-
         if search_type == "dob":
             if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
-                await update.message.reply_text(
-                    "⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন।\n\n"
-                    "📌 উদাহরণ: 01/01/2000"
-                )
+                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
                 return
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
-    results = search_zip(
-        info["zip"],
-        info["csv"],
-        search_input,
-        search_type
-    )
+    results = search_zip(info["zip"], info["csv"], search_input, search_type)
 
     if not results:
         keyboard = [
             [InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")],
             [InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")]
         ]
-
-        await update.message.reply_text(
-            "❌ কোনো Demo Data পাওয়া যায়নি।\n\n🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await update.message.reply_text("❌ কোনো Demo Data পাওয়া যায়নি।\n\n🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     context.user_data["results"] = results
@@ -792,16 +618,10 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_results = results[:10]
 
     for row in first_results:
-        report = make_report(
-            row,
-            info["name"],
-            info["division"],
-            info["district"]
-        )
+        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
         await update.message.reply_text(report)
 
     keyboard = []
-
     if len(results) > 10:
         keyboard.append([InlineKeyboardButton("➡️ আরো দেখুন", callback_data="next_page")])
 
@@ -809,11 +629,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")])
 
     summary_text = f"📄 মোট ফলাফল: {len(results)} টি\n\n📑 প্রথম {min(10, len(results))} টি রিপোর্ট দেখানো হয়েছে।"
-
-    await update.message.reply_text(
-        summary_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text(summary_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # =====================================================
@@ -821,32 +637,18 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================================================
 
 def main():
-    threading.Thread(
-        target=run_web_server,
-        daemon=True
-    ).start()
+    threading.Thread(target=run_web_server, daemon=True).start()
+    print("🌐 Web Server চালু হয়েছে")
 
-    print("🌐 Web Server चालू হয়েছে")
-
-    app = (
-        Application
-        .builder()
-        .token(TOKEN)
-        .build()
-    )
+    app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
 
-    print("🤖 Telegram Demo Search Bot चालू হয়েছে!")
-
+    print("🤖 Telegram Demo Search Bot চালু হয়েছে!")
     app.run_polling()
 
-
-# =====================================================
-# 18. Start
-# =====================================================
 
 if __name__ == "__main__":
     main()
