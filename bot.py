@@ -145,11 +145,13 @@ def run_web_server():
 # =====================================================
 
 def normalize(text):
+    if not text:
+        return ""
     return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
 # =====================================================
-# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Fully Fixed & Robust)
+# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Debug Enabled)
 # =====================================================
 
 def search_archive(archive_path, search_input, search_type):
@@ -159,15 +161,16 @@ def search_archive(archive_path, search_input, search_type):
 
     results = []
     column_mappings = {
-        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি"],
-        "name": ["name", "fullname", "नाम", "নাম"],
-        "father": ["father", "fathername", "father_name", "পিতা", "পিতার নাম"],
-        "mother": ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম"],
-        "dob": ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ"]
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি", "sl", "slno", "voter"],
+        "name": ["name", "fullname", "नाम", "নাম", "votername"],
+        "father": ["father", "fathername", "father_name", "পিতা", "পিতার নাম", "fathersname"],
+        "mother": ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম", "mothersname"],
+        "dob": ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ", "birth"]
     }
 
     try:
-        # .7z ফাইলের জন্য শক্তিশালী এক্সট্রাকশন
+        file_bytes = None
+        
         if archive_path.endswith(".7z"):
             with py7zr.SevenZipFile(archive_path, mode='r') as z:
                 all_files = z.getnames()
@@ -175,35 +178,42 @@ def search_archive(archive_path, search_input, search_type):
                 
                 if csv_file_name:
                     extracted = z.readall()
-                    file_obj = extracted.get(csv_file_name)
-                    if file_obj:
-                        file_bytes = file_obj.read()
-                        try:
-                            decoded_text = file_bytes.decode('utf-8-sig')
-                        except UnicodeDecodeError:
-                            decoded_text = file_bytes.decode('utf-8', errors='ignore')
+                    # 7z Extraction Check
+                    for k, v in extracted.items():
+                        if k.lower().endswith(".csv"):
+                            file_bytes = v.read()
+                            break
 
-                        text_file = io.StringIO(decoded_text)
-                        reader = csv.DictReader(text_file)
-                        results = process_csv_search(reader, search_input, search_type, column_mappings)
-
-        # .zip ফাইলের জন্য
         elif archive_path.endswith(".zip"):
             with zipfile.ZipFile(archive_path, "r") as z:
                 all_files = z.namelist()
                 csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
-                
                 if csv_file_name:
                     with z.open(csv_file_name) as file:
                         file_bytes = file.read()
-                        try:
-                            decoded_text = file_bytes.decode('utf-8-sig')
-                        except UnicodeDecodeError:
-                            decoded_text = file_bytes.decode('utf-8', errors='ignore')
 
-                        text_file = io.StringIO(decoded_text)
-                        reader = csv.DictReader(text_file)
-                        results = process_csv_search(reader, search_input, search_type, column_mappings)
+        if file_bytes:
+            # Decode Logic
+            decoded_text = ""
+            for enc in ['utf-8-sig', 'utf-8', 'utf-16', 'latin-1', 'cp1252']:
+                try:
+                    decoded_text = file_bytes.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+
+            text_file = io.StringIO(decoded_text)
+            
+            # Auto Delimiter Detect (Comma or Tab)
+            sample = decoded_text[:2000]
+            delimiter = '\t' if '\t' in sample and sample.count('\t') > sample.count(',') else ','
+            
+            reader = csv.DictReader(text_file, delimiter=delimiter)
+            
+            # Print Column Names in Console for Debugging
+            print(f"📌 {archive_path} এর কলামসমূহ:", reader.fieldnames)
+            
+            results = process_csv_search(reader, search_input, search_type, column_mappings)
 
     except Exception as e:
         print(f"❌ Archive Reading Error ({archive_path}):", e)
@@ -215,9 +225,14 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
     results = []
     
     if not reader.fieldnames:
+        print("⚠️ CSV কলাম বা হেডার খালি পাওয়া গেছে!")
         return []
 
     for row in reader:
+        # Check empty rows
+        if not any(row.values()):
+            continue
+
         normalized_row = {normalize(k): str(v or "").strip() for k, v in row.items() if k}
 
         if search_type == "multi":
@@ -259,6 +274,14 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
                     found_value = normalized_row[column_name]
                     break
 
+            # Fallback: Search all columns if column map missing
+            if not found_value and search_type == "name":
+                for k, v in normalized_row.items():
+                    if str(search_input).strip().lower() in v.lower():
+                        results.append(dict(row))
+                        break
+                continue
+
             search_value = str(search_input).strip().lower()
             found_value_normalized = str(found_value).strip().lower()
 
@@ -277,7 +300,7 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
 # =====================================================
 
 def get_value(row, names):
-    normalized_row = {normalize(k): v for k, v in row.items()}
+    normalized_row = {normalize(k): v for k, v in row.items() if k}
     for name in names:
         value = normalized_row.get(normalize(name))
         if value is not None:
@@ -292,12 +315,12 @@ def get_value(row, names):
 # =====================================================
 
 def make_report(row, seat_name, division, district):
-    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি"])
+    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি", "sl", "slno", "voter"])
     serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
-    name = get_value(row, ["name", "fullname", "नाम", "নাম"])
-    father = get_value(row, ["father", "fathername", "father_name", "পিতা", "পিতার নাম"])
-    mother = get_value(row, ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম"])
-    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ"])
+    name = get_value(row, ["name", "fullname", "नाम", "নাম", "votername"])
+    father = get_value(row, ["father", "fathername", "father_name", "পিতা", "পিতার নাম", "fathersname"])
+    mother = get_value(row, ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম", "mothersname"])
+    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ", "birth"])
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
     address = get_value(row, ["address", "ঠিকানা"])
@@ -676,7 +699,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("🌐 Web Server চালু হয়েছে")
+    print("🌐 Web Server चालू হয়েছে")
 
     app = Application.builder().token(TOKEN).build()
 
