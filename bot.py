@@ -18,7 +18,7 @@ from telegram.ext import (
 # 1. এখানে আপনার Telegram Bot Token বসান
 # =====================================================
 
-TOKEN = "8624453473:AAGruXbUjMfE9w7iVZ7J3ciWtG6wc5oZm_M"
+TOKEN = "8757771538:AAFt6VmtbOkFJ_0QSxpAWW8cVX8VwTUfC_E"
 
 
 # =====================================================
