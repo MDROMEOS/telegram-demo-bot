@@ -1,6 +1,7 @@
 import os
 import csv
 import zipfile
+import py7zr  # 7z ফাইল রিড করার জন্য
 import threading
 import io
 import re
@@ -31,46 +32,84 @@ TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
 
 
 # =====================================================
-# 2. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (Auto Detector)
+# 2. ইংরেজি ফাইল নেম থেকে বাংলা নাম ম্যাপিং
 # =====================================================
 
-# এই ডিকশনারিগুলো অটোমেটিক ডায়নামিকভাবে তৈরি হবে
+BANGLA_MAP = {
+    # বিভাগসমূহ
+    "rangpur": "রংপুর বিভাগ",
+    "rajshahi": "রাজশাহী বিভাগ",
+    "khulna": "খুলনা বিভাগ",
+    "barishal": "বরিশাল বিভাগ",
+    "dhaka": "ঢাকা বিভাগ",
+    "mymensingh": "ময়মনসিংহ বিভাগ",
+    "sylhet": "সিলেট বিভাগ",
+    "chattogram": "চট্টগ্রাম বিভাগ",
+
+    # জেলাসমূহ (প্রয়োজন অনুযায়ী আরও যোগ করা যাবে)
+    "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
+    "nilphamari": "নীলফামারী", "lalmonirhat": "লালমনিরহাট", "kurigram": "কুড়িগ্রাম",
+    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া",
+    "chapainawabganj": "চাঁপাইনবাবগঞ্জ", "naogaon": "নওগাঁ", "natore": "নাটোর",
+    "sirajganj": "সিরাজগঞ্জ", "pabna": "পাবনা", "meherpur": "মেহেরপুর",
+    "kushtia": "কুষ্টিয়া", "chuadanga": "চুয়াডাঙ্গা", "jhenaidah": "ঝিনাইদহ",
+    "jashore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
+    "bagerhat": "বাগেরহাট", "satkhira": "সাতক্ষীরা", "barguna": "বরগুনা",
+    "patuakhali": "পটুয়াখালী", "bhola": "ভোলা", "jhalokati": "ঝালকাঠি",
+    "pirojpur": "পিরোজপুর", "tangail": "টাঙ্গাইল", "kishoreganj": "কিশোরগঞ্জ",
+    "manikganj": "মানিকগঞ্জ", "munshiganj": "মুন্সীগঞ্জ", "gazipur": "গাজীপুর",
+    "narsingdi": "নরসিংদী", "narayanganj": "নারায়ণগঞ্জ", "rajbari": "রাজবাড়ী",
+    "faridpur": "ফরিদপুর", "gopalganj": "গোপালগঞ্জ", "madaripur": "মাদারীপুর",
+    "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
+    "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
+    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
+    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
+    "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
+    "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
+}
+
+
+# =====================================================
+# 3. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (ZIP + 7Z)
+# =====================================================
+
 SEAT_FILES = {}
-DIVISIONS_MAP = {}  # { 'চট্টগ্রাম বিভাগ': { 'লক্ষ্মীপুর': ['seat_key_1', 'seat_key_2'] } }
+DIVISIONS_MAP = {}
 
 def auto_load_zip_files():
     global SEAT_FILES, DIVISIONS_MAP
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    # আপনার প্রজেক্টের সব voters_*.zip ফাইল খুঁজে বের করবে
-    zip_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".zip")]
+    # .zip এবং .7z উভয় ধরনের ফাইল স্ক্যান করবে
+    archive_files = [
+        f for f in os.listdir(".") 
+        if f.startswith("voters_") and (f.endswith(".zip") or f.endswith(".7z"))
+    ]
 
-    for index, zip_name in enumerate(sorted(zip_files), start=1):
+    for index, archive_name in enumerate(sorted(archive_files), start=1):
         seat_key = f"auto_seat_{index}"
         
-        # ফাইল নাম ফরম্যাট: voters_div_dist_seat.zip
-        # যেমন: voters_chattogram_lakshmipur_seat1.zip
-        raw_name = zip_name.replace("voters_", "").replace(".zip", "")
+        # এক্সটেনশন মুছে ফরম্যাট আলাদা করা
+        raw_name = archive_name.replace("voters_", "")
+        raw_name = re.sub(r'\.(zip|7z)$', '', raw_name)
         parts = raw_name.split("_")
 
-        # ডিফল্ট ভ্যালু সেট করে রাখা
-        division = parts[0].capitalize() if len(parts) > 0 else "অন্যান্য"
-        district = parts[1].capitalize() if len(parts) > 1 else "সাধারণ"
-        seat_name = f"আসন-{parts[2]}" if len(parts) > 2 else f"আসন-{index}"
+        division_raw = parts[0].lower() if len(parts) > 0 else "other"
+        district_raw = parts[1].lower() if len(parts) > 1 else "general"
+        seat_raw = parts[2] if len(parts) > 2 else f"{index}"
 
-        csv_inside_expected = zip_name.replace(".zip", ".csv")
+        division = BANGLA_MAP.get(division_raw, division_raw.capitalize())
+        district = BANGLA_MAP.get(district_raw, district_raw.capitalize())
+        seat_name = f"আসন-{seat_raw.replace('seat', '')}"
 
-        # SEAT_FILES-এ ডাটা রাখা
         SEAT_FILES[seat_key] = {
             "name": seat_name,
             "division": division,
             "district": district,
-            "zip": zip_name,
-            "csv": csv_inside_expected,
+            "archive": archive_name,
         }
 
-        # বিভাগ এবং জেলা অনুযায়ী সাজিয়ে রাখা
         if division not in DIVISIONS_MAP:
             DIVISIONS_MAP[division] = {}
         if district not in DIVISIONS_MAP[division]:
@@ -78,14 +117,14 @@ def auto_load_zip_files():
             
         DIVISIONS_MAP[division][district].append(seat_key)
 
-    print(f"✅ মোট {len(SEAT_FILES)} টি জিপ ফাইল অটোমেটিক ডিটেক্ট করা হয়েছে!")
+    print(f"✅ মোট {len(SEAT_FILES)} টি (ZIP/7Z) ফাইল লোড হয়েছে!")
 
-# বট স্টার্ট হওয়ার সাথে সাথে ফাইল লোড করবে
+# প্রথমবার অটোমেটিক ফাইল লোড
 auto_load_zip_files()
 
 
 # =====================================================
-# 3. Flask Web Server
+# 4. Flask Web Server
 # =====================================================
 
 web_app = Flask(__name__)
@@ -104,7 +143,7 @@ def run_web_server():
 
 
 # =====================================================
-# 4. Column Name Normalize
+# 5. Column Name Normalize
 # =====================================================
 
 def normalize(text):
@@ -112,36 +151,11 @@ def normalize(text):
 
 
 # =====================================================
-# 5. ZIP-এর ভিতরে CSV খোঁজা
+# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ
 # =====================================================
 
-def find_csv_in_zip(zip_path, expected_csv):
-    if not os.path.exists(zip_path):
-        return None
-
-    try:
-        with zipfile.ZipFile(zip_path, "r") as z:
-            for name in z.namelist():
-                if name.endswith(expected_csv):
-                    return name
-            for name in z.namelist():
-                if name.lower().endswith(".csv"):
-                    return name
-    except Exception as e:
-        print("ZIP Error:", e)
-
-    return None
-
-
-# =====================================================
-# 6. CSV Search (Single & Multi AND Search)
-# =====================================================
-
-def search_zip(zip_path, csv_name, search_input, search_type):
-    csv_inside = find_csv_in_zip(zip_path, csv_name)
-
-    if not csv_inside:
-        print("CSV পাওয়া যায়নি:", csv_name)
+def search_archive(archive_path, search_input, search_type):
+    if not os.path.exists(archive_path):
         return []
 
     results = []
@@ -154,71 +168,96 @@ def search_zip(zip_path, csv_name, search_input, search_type):
     }
 
     try:
-        with zipfile.ZipFile(zip_path, "r") as z:
-            with z.open(csv_inside) as file:
-                text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
-                reader = csv.DictReader(text_file)
+        # .7z ফাইলের জন্য
+        if archive_path.endswith(".7z"):
+            with py7zr.SevenZipFile(archive_path, mode='r') as z:
+                all_files = z.getnames()
+                csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
+                
+                if csv_file_name:
+                    extracted = z.read([csv_file_name])
+                    file_bytes = extracted[csv_file_name]
+                    text_file = io.TextIOWrapper(file_bytes, encoding="utf-8-sig", errors="replace", newline="")
+                    reader = csv.DictReader(text_file)
+                    results = process_csv_search(reader, search_input, search_type, column_mappings)
 
-                for row in reader:
-                    normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
-
-                    if search_type == "multi":
-                        is_match = True
-                        for field, search_val in search_input.items():
-                            if not search_val:
-                                continue
-
-                            possible_cols = column_mappings.get(field, [])
-                            found_value = ""
-
-                            for col in possible_cols:
-                                norm_col = normalize(col)
-                                if norm_col in normalized_row:
-                                    found_value = normalized_row[norm_col]
-                                    break
-
-                            s_val = str(search_val).strip().lower()
-                            f_val = str(found_value).strip().lower()
-
-                            if field == "dob":
-                                s_val = s_val.replace("-", "/").replace(".", "/")
-                                f_val = f_val.replace("-", "/").replace(".", "/")
-
-                            if s_val not in f_val:
-                                is_match = False
-                                break
-
-                        if is_match:
-                            results.append(dict(row))
-
-                    else:
-                        search_columns = column_mappings.get(search_type, [])
-                        found_value = ""
-
-                        for column in search_columns:
-                            column_name = normalize(column)
-                            if column_name in normalized_row:
-                                found_value = normalized_row[column_name]
-                                break
-
-                        search_value = str(search_input).strip().lower()
-                        found_value_normalized = str(found_value).strip().lower()
-
-                        if search_type == "dob":
-                            search_value = search_value.replace("-", "/").replace(".", "/")
-                            found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
-
-                        if search_value in found_value_normalized:
-                            results.append(dict(row))
+        # .zip ফাইলের জন্য
+        elif archive_path.endswith(".zip"):
+            with zipfile.ZipFile(archive_path, "r") as z:
+                all_files = z.namelist()
+                csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
+                
+                if csv_file_name:
+                    with z.open(csv_file_name) as file:
+                        text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
+                        reader = csv.DictReader(text_file)
+                        results = process_csv_search(reader, search_input, search_type, column_mappings)
 
     except Exception as e:
-        print("CSV Search Error:", e)
+        print(f"Archive Error ({archive_path}):", e)
+
+    return results
+
+
+def process_csv_search(reader, search_input, search_type, column_mappings):
+    results = []
+    for row in reader:
+        normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
+
+        if search_type == "multi":
+            is_match = True
+            for field, search_val in search_input.items():
+                if not search_val:
+                    continue
+
+                possible_cols = column_mappings.get(field, [])
+                found_value = ""
+
+                for col in possible_cols:
+                    norm_col = normalize(col)
+                    if norm_col in normalized_row:
+                        found_value = normalized_row[norm_col]
+                        break
+
+                s_val = str(search_val).strip().lower()
+                f_val = str(found_value).strip().lower()
+
+                if field == "dob":
+                    s_val = s_val.replace("-", "/").replace(".", "/")
+                    f_val = f_val.replace("-", "/").replace(".", "/")
+
+                if s_val not in f_val:
+                    is_match = False
+                    break
+
+            if is_match:
+                results.append(dict(row))
+
+        else:
+            search_columns = column_mappings.get(search_type, [])
+            found_value = ""
+
+            for column in search_columns:
+                column_name = normalize(column)
+                if column_name in normalized_row:
+                    found_value = normalized_row[column_name]
+                    break
+
+            search_value = str(search_input).strip().lower()
+            found_value_normalized = str(found_value).strip().lower()
+
+            if search_type == "dob":
+                search_value = search_value.replace("-", "/").replace(".", "/")
+                found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+
+            if search_value in found_value_normalized:
+                results.append(dict(row))
 
     return results
 
 
 # =====================================================
-# 7. CSV থেকে Value নেওয়া
+# 7. CSV থেকে Value নেওয়া
 # =====================================================
 
 def get_value(row, names):
@@ -233,7 +272,7 @@ def get_value(row, names):
 
 
 # =====================================================
-# 8. রিপোর্ট তৈরি
+# 8. রিপোর্ট ফরম্যাটিং
 # =====================================================
 
 def make_report(row, seat_name, division, district):
@@ -288,7 +327,7 @@ def make_report(row, seat_name, division, district):
 
 
 # =====================================================
-# 9. ডাইনামিক বিভাগ নির্বাচন
+# 9. ডাইনামিক মেনু ফাংশনসমূহ
 # =====================================================
 
 async def show_division_menu(query_or_message):
@@ -296,14 +335,13 @@ async def show_division_menu(query_or_message):
     divisions = list(DIVISIONS_MAP.keys())
 
     if not divisions:
-        text = "⚠️ কোনো voters_*.zip ফাইল পাওয়া যায়নি! ফাইল আপলোড করে নিশ্চিত করুন।"
+        text = "⚠️ কোনো voters_*.zip বা voters_*.7z ফাইল পাওয়া যায়নি!"
         if hasattr(query_or_message, 'edit_message_text'):
             await query_or_message.edit_message_text(text)
         else:
             await query_or_message.reply_text(text)
         return
 
-    # ২ টি করে বিভাগ একসাথে বোতামে দেখাবে
     for i in range(0, len(divisions), 2):
         row = [InlineKeyboardButton(f"🌍 {divisions[i]}", callback_data=f"div_{divisions[i]}")]
         if i + 1 < len(divisions):
@@ -318,10 +356,6 @@ async def show_division_menu(query_or_message):
     else:
         await query_or_message.reply_text(text, reply_markup=reply_markup)
 
-
-# =====================================================
-# 10. ডাইনামিক জেলা নির্বাচন
-# =====================================================
 
 async def show_district_menu(query, context):
     division = context.user_data.get("division")
@@ -341,10 +375,6 @@ async def show_district_menu(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-# =====================================================
-# 11. ডাইনামিক আসন নির্বাচন
-# =====================================================
 
 async def show_seat_menu(query, context):
     division = context.user_data.get("division")
@@ -370,10 +400,6 @@ async def show_seat_menu(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-# =====================================================
-# 12. Search Menu
-# =====================================================
 
 async def show_search_menu(query_or_message, context):
     seat = context.user_data.get("seat")
@@ -401,18 +427,14 @@ async def show_search_menu(query_or_message, context):
 
 
 # =====================================================
-# 13. /start
+# 10. Handlers
 # =====================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    auto_load_zip_files()  # প্রতিবার স্টার্ট দিলে নতুন আপলোড করা ফাইল লোড করে নেবে
+    auto_load_zip_files()
     await show_division_menu(update.message)
 
-
-# =====================================================
-# 14. রিপোর্ট পাঠানো
-# =====================================================
 
 async def send_page(query, context):
     results = context.user_data.get("results", [])
@@ -441,10 +463,6 @@ async def send_page(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-# =====================================================
-# 15. Button Handler
-# =====================================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -516,8 +534,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "নাম: [আপনার নাম]\n"
             "পিতা: [পিতার নাম]\n"
             "মাতা: [মাতার নাম]\n"
-            "জন্ম: [01/01/2000]\n\n"
-            "*(যেকোনো ১টি বা একাধিক ফিল্ড একসাথে দিতে পারেন)*"
+            "জন্ম: [01/01/2000]"
         )
         await query.edit_message_text(text, parse_mode="Markdown")
         return
@@ -531,10 +548,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = f"✅ {info['title']} দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n✏️ এখন আপনার {info['title']} লিখে পাঠান।"
         await query.edit_message_text(text)
 
-
-# =====================================================
-# 16. Search Handler
-# =====================================================
 
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "seat" not in context.user_data:
@@ -602,7 +615,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
-    results = search_zip(info["zip"], info["csv"], search_input, search_type)
+    results = search_archive(info["archive"], search_input, search_type)
 
     if not results:
         keyboard = [
@@ -633,7 +646,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================================================
-# 17. Main
+# 11. Main Function
 # =====================================================
 
 def main():
