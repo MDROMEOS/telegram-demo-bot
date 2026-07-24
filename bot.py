@@ -64,7 +64,7 @@ BANGLA_MAP = {
     "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
     "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
     "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
-    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
+    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোখালী",
     "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
     "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
 }
@@ -149,24 +149,25 @@ def normalize(text):
 
 
 # =====================================================
-# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Fixed for 7z)
+# 6. Archive (ZIP / 7Z) থেকে CSV সার্চ (Fully Fixed & Robust)
 # =====================================================
 
 def search_archive(archive_path, search_input, search_type):
     if not os.path.exists(archive_path):
+        print(f"❌ File not found: {archive_path}")
         return []
 
     results = []
     column_mappings = {
-        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
-        "name": ["name", "fullname", "নাম"],
-        "father": ["father", "fathername", "পিতা"],
-        "mother": ["mother", "mothername", "মাতা"],
-        "dob": ["dob", "dateofbirth", "birthdate", "জন্ম"]
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি"],
+        "name": ["name", "fullname", "नाम", "নাম"],
+        "father": ["father", "fathername", "father_name", "পিতা", "পিতার নাম"],
+        "mother": ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম"],
+        "dob": ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ"]
     }
 
     try:
-        # .7z ফাইলের জন্য সঠিক এক্সট্রাকশন পদ্ধতি
+        # .7z ফাইলের জন্য শক্তিশালী এক্সট্রাকশন
         if archive_path.endswith(".7z"):
             with py7zr.SevenZipFile(archive_path, mode='r') as z:
                 all_files = z.getnames()
@@ -174,9 +175,15 @@ def search_archive(archive_path, search_input, search_type):
                 
                 if csv_file_name:
                     extracted = z.readall()
-                    if csv_file_name in extracted:
-                        file_bytes = extracted[csv_file_name].read()
-                        text_file = io.TextIOWrapper(io.BytesIO(file_bytes), encoding="utf-8-sig", errors="replace", newline="")
+                    file_obj = extracted.get(csv_file_name)
+                    if file_obj:
+                        file_bytes = file_obj.read()
+                        try:
+                            decoded_text = file_bytes.decode('utf-8-sig')
+                        except UnicodeDecodeError:
+                            decoded_text = file_bytes.decode('utf-8', errors='ignore')
+
+                        text_file = io.StringIO(decoded_text)
                         reader = csv.DictReader(text_file)
                         results = process_csv_search(reader, search_input, search_type, column_mappings)
 
@@ -188,20 +195,30 @@ def search_archive(archive_path, search_input, search_type):
                 
                 if csv_file_name:
                     with z.open(csv_file_name) as file:
-                        text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
+                        file_bytes = file.read()
+                        try:
+                            decoded_text = file_bytes.decode('utf-8-sig')
+                        except UnicodeDecodeError:
+                            decoded_text = file_bytes.decode('utf-8', errors='ignore')
+
+                        text_file = io.StringIO(decoded_text)
                         reader = csv.DictReader(text_file)
                         results = process_csv_search(reader, search_input, search_type, column_mappings)
 
     except Exception as e:
-        print(f"Archive Error ({archive_path}):", e)
+        print(f"❌ Archive Reading Error ({archive_path}):", e)
 
     return results
 
 
 def process_csv_search(reader, search_input, search_type, column_mappings):
     results = []
+    
+    if not reader.fieldnames:
+        return []
+
     for row in reader:
-        normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
+        normalized_row = {normalize(k): str(v or "").strip() for k, v in row.items() if k}
 
         if search_type == "multi":
             is_match = True
@@ -222,8 +239,8 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
                 f_val = str(found_value).strip().lower()
 
                 if field == "dob":
-                    s_val = s_val.replace("-", "/").replace(".", "/")
-                    f_val = f_val.replace("-", "/").replace(".", "/")
+                    s_val = re.sub(r'[\.\-\/]', '', s_val)
+                    f_val = re.sub(r'[\.\-\/]', '', f_val)
 
                 if s_val not in f_val:
                     is_match = False
@@ -246,10 +263,10 @@ def process_csv_search(reader, search_input, search_type, column_mappings):
             found_value_normalized = str(found_value).strip().lower()
 
             if search_type == "dob":
-                search_value = search_value.replace("-", "/").replace(".", "/")
-                found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+                search_value = re.sub(r'[\.\-\/]', '', search_value)
+                found_value_normalized = re.sub(r'[\.\-\/]', '', found_value_normalized)
 
-            if search_value in found_value_normalized:
+            if search_value and search_value in found_value_normalized:
                 results.append(dict(row))
 
     return results
@@ -275,12 +292,12 @@ def get_value(row, names):
 # =====================================================
 
 def make_report(row, seat_name, division, district):
-    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id"])
+    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "voter_id", "voterid", "ভোটার নম্বর", "আইডি"])
     serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
-    name = get_value(row, ["name", "fullname", "নাম"])
-    father = get_value(row, ["father", "fathername", "পিতা"])
-    mother = get_value(row, ["mother", "mothername", "মাতা"])
-    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "জন্ম"])
+    name = get_value(row, ["name", "fullname", "नाम", "নাম"])
+    father = get_value(row, ["father", "fathername", "father_name", "পিতা", "পিতার নাম"])
+    mother = get_value(row, ["mother", "mothername", "mother_name", "মাতা", "মাতার নাম"])
+    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "birth_date", "জন্ম", "জন্মতারিখ"])
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
     address = get_value(row, ["address", "ঠিকানা"])
@@ -620,10 +637,6 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         search_input = raw_text
-        if search_type == "dob":
-            if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
-                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
-                return
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
