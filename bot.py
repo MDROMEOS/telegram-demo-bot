@@ -18,7 +18,7 @@ from telegram.error import BadRequest
 # =====================================================
 # 1. Telegram Bot Token
 # =====================================================
-TOKEN = "8757771538:AAFhe_TDcM1Ffg5MJ2bsCGyJUXOr5QlNH-8"
+TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
 
 # =====================================================
 # 2. ইংরেজি ফাইল নেম থেকে বাংলা নাম ম্যাপিং
