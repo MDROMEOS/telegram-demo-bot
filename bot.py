@@ -3,6 +3,7 @@ import csv
 import threading
 import io
 import re
+from datetime import datetime
 
 from flask import Flask
 
@@ -27,7 +28,8 @@ from telegram.error import BadRequest
 # 1. Telegram Bot Token
 # =====================================================
 
-TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg
+TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
+
 
 # =====================================================
 # 2. বাংলা ম্যাপিং
@@ -35,14 +37,14 @@ TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg
 
 BANGLA_MAP = {
     # বিভাগসমূহ
-    "rangpur": "রংপুর বিভাগ",
-    "rajshahi": "রাজশাহী বিভাগ",
-    "khulna": "খুলনা বিভাগ",
-    "barishal": "বরিশাল বিভাগ",
-    "dhaka": "ঢাকা বিভাগ",
-    "mymensingh": "ময়মনসিংহ বিভাগ",
-    "sylhet": "সিলেট বিভাগ",
-    "chattogram": "চট্টগ্রাম বিভাগ",
+    "rangpur": "রংপুর",
+    "rajshahi": "রাজশাহী",
+    "khulna": "খুলনা",
+    "barishal": "বরিশাল",
+    "dhaka": "ঢাকা",
+    "mymensingh": "ময়মনসিংহ",
+    "sylhet": "সিলেট",
+    "chattogram": "চট্টগ্রাম",
 
     # জেলাসমূহ
     "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
@@ -94,7 +96,7 @@ def auto_load_csv_files():
 
         division = BANGLA_MAP.get(division_raw, division_raw.capitalize())
         district = BANGLA_MAP.get(district_raw, district_raw.capitalize())
-        seat_name = f"আসন-{seat_raw.replace('seat', '')}"
+        seat_name = f"{district}-{seat_raw.replace('seat', '')}"
 
         SEAT_FILES[seat_key] = {
             "name": seat_name,
@@ -144,7 +146,7 @@ def search_csv(file_path, search_input, search_type):
 
     results = []
     column_mappings = {
-        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "nid"],
         "name": ["name", "fullname", "নাম"],
         "father": ["father", "fathername", "পিতা"],
         "mother": ["mother", "mothername", "মাতা"],
@@ -224,8 +226,25 @@ def get_value(row, names):
     return "N/A"
 
 
+def calculate_age(dob_str):
+    if not dob_str or dob_str == "N/A":
+        return ""
+    try:
+        clean_dob = dob_str.replace(".", "/").replace("-", "/")
+        parts = clean_dob.split("/")
+        if len(parts) == 3:
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            birth_date = datetime(year, month, day)
+            today = datetime.today()
+            age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            return f" · {age} বছর"
+    except Exception:
+        pass
+    return ""
+
+
 def make_report(row, seat_name, division, district):
-    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id"])
+    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "nid"])
     serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
     name = get_value(row, ["name", "fullname", "নাম"])
     father = get_value(row, ["father", "fathername", "পিতা"])
@@ -234,45 +253,29 @@ def make_report(row, seat_name, division, district):
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
     address = get_value(row, ["address", "ঠিকানা"])
-    area = get_value(row, ["area", "এলাকা"])
     upazila = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
-    post_code = get_value(row, ["zip", "zipcode", "postalcode", "postcode", "পোস্টকোড", "পোস্ট কোড"])
+    area_code = get_value(row, ["code", "areacode", "আসনকোড", "কোড"])
+    raw_age = get_value(row, ["age", "বয়স"])
 
-    return f"""🪪 Demo Voter Report
+    # বয়স কাস্টম ক্যালকুলেশন
+    if raw_age != "N/A" and raw_age != "":
+        age_str = f" · {raw_age} বছর" if "বছর" not in raw_age else f" · {raw_age}"
+    else:
+        age_str = calculate_age(dob)
 
-━━━━━━━━━━━━━━━━━━━━
-
-🔢 Demo ID: {voter_no}
-
-🔖 সিরিয়াল: {serial}
-
-👤 নাম: {name}
-
-👨 পিতা: {father}
-
-👩 মাতা: {mother}
-
-🎂 জন্মতারিখ: {dob}
-
-⚧ লিঙ্গ: {gender}
-
-💼 পেশা: {occupation}
-
-🏠 ঠিকানা: {address}
-
-📍 এলাকা: {area}
-
-📌 উপজেলা/থানা: {upazila}
-
-📮 পোস্ট কোড: {post_code}
-
-🌍 বিভাগ: {division}
-
-🗺 জেলা: {district}
-
-🏛 আসন: {seat_name}
-
-━━━━━━━━━━━━━━━━━━━━"""
+    return f"""🪪 {name}
+────────────────────
+🔢 NID  {voter_no}
+🔖 সিরিয়াল  {serial}
+👨 পিতা  {father}
+👩 মাতা  {mother}
+🎂 জন্ম  {dob}{age_str}
+⚧ লিঙ্গ  {gender}
+💼 পেশা  {occupation}
+🏠 ঠিকানা  {address}
+📍 থানা  {upazila}
+🗺 জেলা  {district}  ·  বিভাগ  {division}
+🏛 আসন  {seat_name}  ·  কোড  {area_code}"""
 
 
 async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
@@ -556,22 +559,4 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("⚠️ সঠিক ফরম্যাটে তথ্য দিন।")
                 return
 
-        if len(non_empty) == 1:
-            single_key = list(non_empty.keys())[0]
-            search_type = single_key
-            search_input = non_empty[single_key]
-        else:
-            search_input = parsed
-
-    else:
-        search_input = raw_text
-        if search_type == "dob":
-            if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
-                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
-                return
-
-    await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
-
-    results = search_csv(info["file"], search_input, search_type)
-
-    if no
+    
