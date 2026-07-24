@@ -33,7 +33,7 @@ TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
 
 
 # =====================================================
-# 2. বাংলা ম্যাপিং
+# 2. বাংলা ম্যাপিং (বিভাগ, জেলা ও থানা)
 # =====================================================
 
 BANGLA_MAP = {
@@ -69,6 +69,28 @@ BANGLA_MAP = {
     "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
 }
 
+# 🔹 থানার নাম বাংলা করার ম্যাপিং ডিকশনারি
+THANA_MAP = {
+    "savar": "সাভার",
+    "dhamrai": "ধামরাই",
+    "keraniganj": "কেরানীগঞ্জ",
+    "dohar": "দোহার",
+    "nawabganj": "নবাবগঞ্জ",
+    "mirpur": "মিরপুর",
+    "uttara": "উত্তরা",
+    "gulshan": "গুলশান",
+    "dhanmondi": "ধানমন্ডি",
+    "gazipur sadar": "গাজীপুর সদর",
+    "kaliakair": "কালিয়াকৈর",
+    "kapasia": "কাপাসিয়া",
+    "sreepur": "শ্রীপুর",
+    "kaliganj": "কালীগঞ্জ",
+    "bogura sadar": "বগুড়া সদর",
+    "sathiya": "সাঁথিয়া",
+    "ishwardi": "ঈশ্বরদী",
+    # 📌 আরও থানা থাকলে ইংরেজিতে ছোট হাতের লিখে ডানপাশে বাংলা যোগ করতে পারেন
+}
+
 
 # =====================================================
 # 3. অটোমেটিক ফাইল স্ক্যানার (ZIP & CSV Reader)
@@ -82,7 +104,6 @@ def auto_load_csv_files():
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    # .zip এবং .csv উভয় ফাইলই স্ক্যান করবে
     data_files = [f for f in os.listdir(".") if f.startswith("voters_") and (f.endswith(".zip") or f.endswith(".csv"))]
 
     for index, file_name in enumerate(sorted(data_files), start=1):
@@ -134,17 +155,19 @@ def run_web_server():
 
 
 # =====================================================
-# 5. Helper & Fast Search Function (ZIP Support Included)
+# 5. Helper & Fast Search Function
 # =====================================================
 
 def normalize(text):
     return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
-def search_csv(file_path, search_input, search_type):
-    if not os.path.exists(file_path):
-        return []
+def get_thana_from_raw(raw_thana):
+    clean = raw_thana.lower().strip()
+    return THANA_MAP.get(clean, raw_thana)
 
+
+def search_in_files(file_list, search_input, search_type, target_thana=None):
     results = []
     column_mappings = {
         "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id", "nid"],
@@ -154,33 +177,48 @@ def search_csv(file_path, search_input, search_type):
         "dob": ["dob", "dateofbirth", "birthdate", "জন্ম"]
     }
 
-    try:
-        # ZIP ফাইল হ্যান্ডলিং
-        if file_path.endswith(".zip"):
-            with zipfile.ZipFile(file_path, 'r') as z:
-                csv_files_in_zip = [f for f in z.namelist() if f.endswith('.csv')]
-                if not csv_files_in_zip:
-                    return []
-                # ZIP-এর ভেতরের প্রথম CSV ফাইলটি রিড করবে
-                with z.open(csv_files_in_zip[0]) as f:
-                    content = io.TextIOWrapper(f, encoding="utf-8-sig", errors="replace")
-                    reader = csv.DictReader(content)
-                    results = process_rows(reader, search_input, search_type, column_mappings)
-        else:
-            # নরমাল CSV ফাইল হ্যান্ডলিং
-            with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
-                reader = csv.DictReader(file)
-                results = process_rows(reader, search_input, search_type, column_mappings)
+    for file_info in file_list:
+        file_path = file_info["file"]
+        seat_name = file_info["name"]
+        division = file_info["division"]
+        district = file_info["district"]
 
-    except Exception as e:
-        print("CSV/ZIP Search Error:", e)
+        if not os.path.exists(file_path):
+            continue
+
+        try:
+            if file_path.endswith(".zip"):
+                with zipfile.ZipFile(file_path, 'r') as z:
+                    csv_files_in_zip = [f for f in z.namelist() if f.endswith('.csv')]
+                    if not csv_files_in_zip:
+                        continue
+                    with z.open(csv_files_in_zip[0]) as f:
+                        content = io.TextIOWrapper(f, encoding="utf-8-sig", errors="replace")
+                        reader = csv.DictReader(content)
+                        res = process_rows(reader, search_input, search_type, column_mappings, seat_name, division, district, target_thana)
+                        results.extend(res)
+            else:
+                with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
+                    reader = csv.DictReader(file)
+                    res = process_rows(reader, search_input, search_type, column_mappings, seat_name, division, district, target_thana)
+                    results.extend(res)
+
+        except Exception as e:
+            print("CSV Search Error:", e)
 
     return results
 
 
-def process_rows(reader, search_input, search_type, column_mappings):
+def process_rows(reader, search_input, search_type, column_mappings, seat_name, division, district, target_thana=None):
     results = []
     for row in reader:
+        # থানা ফিল্টারিং থাকলে আগেই যাচাই করে নেওয়া
+        if target_thana:
+            row_thana = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+            translated_thana = get_thana_from_raw(row_thana)
+            if target_thana.lower() not in translated_thana.lower() and target_thana.lower() not in row_thana.lower():
+                continue
+
         normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
 
         if search_type == "multi":
@@ -210,7 +248,11 @@ def process_rows(reader, search_input, search_type, column_mappings):
                     break
 
             if is_match:
-                results.append(dict(row))
+                item = dict(row)
+                item["_meta_seat"] = seat_name
+                item["_meta_division"] = division
+                item["_meta_district"] = district
+                results.append(item)
 
         else:
             search_columns = column_mappings.get(search_type, [])
@@ -230,9 +272,46 @@ def process_rows(reader, search_input, search_type, column_mappings):
                 found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
 
             if search_value in found_value_normalized:
-                results.append(dict(row))
+                item = dict(row)
+                item["_meta_seat"] = seat_name
+                item["_meta_division"] = division
+                item["_meta_district"] = district
+                results.append(item)
 
     return results
+
+
+def extract_thanas_from_district(seat_keys):
+    thanas = set()
+    for key in seat_keys:
+        file_info = SEAT_FILES.get(key)
+        if not file_info:
+            continue
+        file_path = file_info["file"]
+        
+        try:
+            reader = None
+            if file_path.endswith(".zip"):
+                with zipfile.ZipFile(file_path, 'r') as z:
+                    csv_files = [f for f in z.namelist() if f.endswith('.csv')]
+                    if csv_files:
+                        content = io.TextIOWrapper(z.open(csv_files[0]), encoding="utf-8-sig", errors="replace")
+                        reader = csv.DictReader(content)
+                        for r in reader:
+                            th = get_value(r, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+                            if th and th != "N/A":
+                                thanas.add(get_thana_from_raw(th))
+            else:
+                with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
+                    reader = csv.DictReader(file)
+                    for r in reader:
+                        th = get_value(r, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+                        if th and th != "N/A":
+                            thanas.add(get_thana_from_raw(th))
+        except Exception:
+            pass
+
+    return sorted(list(thanas))
 
 
 def get_value(row, names):
@@ -263,7 +342,7 @@ def calculate_age(dob_str):
     return ""
 
 
-def make_report(row, seat_name, division, district):
+def make_report(row):
     voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id", "nid"])
     serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
     name = get_value(row, ["name", "fullname", "নাম"])
@@ -273,9 +352,16 @@ def make_report(row, seat_name, division, district):
     gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
     occupation = get_value(row, ["occupation", "profession", "পেশা"])
     address = get_value(row, ["address", "ঠিকানা"])
-    upazila = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+    
+    raw_upazila = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+    upazila = get_thana_from_raw(raw_upazila)
+
     area_code = get_value(row, ["code", "areacode", "আসনকোড", "কোড"])
     raw_age = get_value(row, ["age", "বয়স"])
+
+    seat_name = row.get("_meta_seat", "N/A")
+    division = row.get("_meta_division", "N/A")
+    district = row.get("_meta_district", "N/A")
 
     if raw_age != "N/A" and raw_age != "":
         age_str = f" · {raw_age} বছর" if "বছর" not in raw_age else f" · {raw_age}"
@@ -358,6 +444,52 @@ async def show_district_menu(query, context):
     )
 
 
+async def show_district_options_menu(query, context):
+    division = context.user_data.get("division")
+    district = context.user_data.get("district")
+
+    keyboard = [
+        [InlineKeyboardButton(f"🎯 পুরো {district} জেলায় সার্চ করুন", callback_data="mode_district")],
+        [InlineKeyboardButton("📍 থানা অনুযায়ী সার্চ করুন", callback_data="mode_thana")],
+        [InlineKeyboardButton("🏛 আসন অনুযায়ী সার্চ করুন", callback_data="mode_seat")],
+        [InlineKeyboardButton("🔙 জেলা পরিবর্তন", callback_data="back_district")]
+    ]
+
+    await safe_edit_message(
+        query,
+        f"🌍 বিভাগ: {division}\n🗺 জেলা: {district}\n\nআপনি কীভাবে সার্চ করতে চান?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def show_thana_menu(query, context):
+    division = context.user_data.get("division")
+    district = context.user_data.get("district")
+    seat_keys = DIVISIONS_MAP.get(division, {}).get(district, [])
+
+    await safe_edit_message(query, "⏳ থানার তালিকা লোড হচ্ছে, অপেক্ষা করুন...")
+
+    thanas = extract_thanas_from_district(seat_keys)
+
+    keyboard = []
+    if thanas:
+        for i in range(0, len(thanas), 2):
+            row = [InlineKeyboardButton(f"📍 {thanas[i]}", callback_data=f"thana_{thanas[i]}")]
+            if i + 1 < len(thanas):
+                row.append(InlineKeyboardButton(f"📍 {thanas[i+1]}", callback_data=f"thana_{thanas[i+1]}"))
+            keyboard.append(row)
+    else:
+        keyboard.append([InlineKeyboardButton("❌ কোনো থানা পাওয়া যায়নি (সরাসরি সার্চ করুন)", callback_data="mode_district")])
+
+    keyboard.append([InlineKeyboardButton("🔙 অপশন মেনু", callback_data="back_district_options")])
+
+    await safe_edit_message(
+        query,
+        f"🌍 বিভাগ: {division}\n🗺 জেলা: {district}\n\n📍 এখন একটি থানা নির্বাচন করুন:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
 async def show_seat_menu(query, context):
     division = context.user_data.get("division")
     district = context.user_data.get("district")
@@ -375,7 +507,7 @@ async def show_seat_menu(query, context):
             
         keyboard.append(row)
 
-    keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_district")])
+    keyboard.append([InlineKeyboardButton("🔙 অপশন মেনু", callback_data="back_district_options")])
 
     await safe_edit_message(
         query,
@@ -385,23 +517,29 @@ async def show_seat_menu(query, context):
 
 
 async def show_search_menu(query_or_message, context):
+    division = context.user_data.get("division", "N/A")
+    district = context.user_data.get("district", "N/A")
+    thana = context.user_data.get("thana")
     seat = context.user_data.get("seat")
-    info = SEAT_FILES.get(seat, {})
+
+    target_text = f"🌍 বিভাগ: {division}\n🗺 জেলা: {district}\n"
+    if thana:
+        target_text += f"📍 থানা: {thana}\n"
+    elif seat:
+        info = SEAT_FILES.get(seat, {})
+        target_text += f"🏛 আসন: {info.get('name', 'N/A')}\n"
+    else:
+        target_text += "🎯 মোড: পুরো জেলা ফিল্টার\n"
 
     keyboard = [
         [InlineKeyboardButton("⚡ Multi Search (AND Search)", callback_data="search_multi")],
         [InlineKeyboardButton("🆔 Demo ID", callback_data="search_demo_id"), InlineKeyboardButton("👤 Demo নাম", callback_data="search_name")],
         [InlineKeyboardButton("👨 Demo পিতার নাম", callback_data="search_father"), InlineKeyboardButton("👩 Demo মাতার নাম", callback_data="search_mother")],
         [InlineKeyboardButton("🎂 Demo জন্মতারিখ", callback_data="search_dob")],
-        [InlineKeyboardButton("🔙 আসন পরিবর্তন", callback_data="back_seat")]
+        [InlineKeyboardButton("🔙 ফিল্টার পরিবর্তন", callback_data="back_district_options")]
     ]
 
-    text = (
-        f"🌍 বিভাগ: {info.get('division', 'N/A')}\n"
-        f"🗺 জেলা: {info.get('district', 'N/A')}\n"
-        f"🏛 আসন: {info.get('name', 'N/A')}\n\n"
-        "🔎 কোন তথ্য দিয়ে সার্চ করতে চান?"
-    )
+    text = f"{target_text}\n🔎 কোন তথ্য দিয়ে সার্চ করতে চান?"
 
     if hasattr(query_or_message, 'edit_message_text'):
         await safe_edit_message(query_or_message, text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -418,8 +556,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_page(query, context):
     results = context.user_data.get("results", [])
     page = context.user_data.get("page", 0)
-    seat = context.user_data.get("seat")
-    info = SEAT_FILES.get(seat, {})
 
     per_page = 10
     start_index = page * per_page
@@ -427,7 +563,7 @@ async def send_page(query, context):
     page_results = results[start_index:end_index]
 
     for row in page_results:
-        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
+        report = make_report(row)
         await query.message.reply_text(report)
 
     keyboard = []
@@ -463,7 +599,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("dis_"):
         dis_name = data.replace("dis_", "")
         context.user_data["district"] = dis_name
-        await show_seat_menu(query, context)
+        await show_district_options_menu(query, context)
         return
 
     if data == "back_division":
@@ -474,14 +610,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_district_menu(query, context)
         return
 
-    if data in SEAT_FILES:
-        context.user_data["seat"] = data
-        context.user_data.pop("search_type", None)
+    if data == "back_district_options":
+        context.user_data.pop("thana", None)
+        context.user_data.pop("seat", None)
+        await show_district_options_menu(query, context)
+        return
+
+    if data == "mode_district":
+        context.user_data.pop("thana", None)
+        context.user_data.pop("seat", None)
         await show_search_menu(query, context)
         return
 
-    if data == "back_seat":
+    if data == "mode_thana":
+        await show_thana_menu(query, context)
+        return
+
+    if data == "mode_seat":
         await show_seat_menu(query, context)
+        return
+
+    if data.startswith("thana_"):
+        thana_name = data.replace("thana_", "")
+        context.user_data["thana"] = thana_name
+        context.user_data.pop("seat", None)
+        await show_search_menu(query, context)
+        return
+
+    if data in SEAT_FILES:
+        context.user_data["seat"] = data
+        context.user_data.pop("thana", None)
+        context.user_data.pop("search_type", None)
+        await show_search_menu(query, context)
         return
 
     if data == "new_search":
@@ -529,8 +689,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "seat" not in context.user_data:
-        await update.message.reply_text("⚠️ প্রথমে /start দিয়ে বিভাগ, জেলা ও আসন নির্বাচন করুন।")
+    if "district" not in context.user_data:
+        await update.message.reply_text("⚠️ প্রথমে /start দিয়ে বিভাগ ও জেলা নির্বাচন করুন।")
         return
 
     if "search_type" not in context.user_data:
@@ -539,8 +699,22 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     raw_text = update.message.text.strip()
     search_type = context.user_data["search_type"]
-    seat = context.user_data["seat"]
-    info = SEAT_FILES.get(seat, {})
+    
+    division = context.user_data["division"]
+    district = context.user_data["district"]
+    thana = context.user_data.get("thana")
+    seat = context.user_data.get("seat")
+
+    # সার্চের ফাইলের তালিকা ফিল্টার করা
+    target_files = []
+    if seat:
+        if seat in SEAT_FILES:
+            target_files.append(SEAT_FILES[seat])
+    else:
+        seat_keys = DIVISIONS_MAP.get(division, {}).get(district, [])
+        for k in seat_keys:
+            if k in SEAT_FILES:
+                target_files.append(SEAT_FILES[k])
 
     search_input = None
 
@@ -594,7 +768,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
-    results = search_csv(info["file"], search_input, search_type)
+    results = search_in_files(target_files, search_input, search_type, target_thana=thana)
 
     if not results:
         keyboard = [
@@ -610,7 +784,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_results = results[:10]
 
     for row in first_results:
-        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
+        report = make_report(row)
         await update.message.reply_text(report)
 
     keyboard = []
@@ -630,7 +804,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     threading.Thread(target=run_web_server, daemon=True).start()
-    print("🌐 Web Server চালু হয়েছে")
+    print("🌐 Web Server चालू হয়েছে")
 
     app = Application.builder().token(TOKEN).build()
 
