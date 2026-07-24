@@ -33,40 +33,40 @@ TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
 
 
 # =====================================================
-# 2. বাংলা ম্যাপিং
+# 2. সম্পূর্ণ বাংলা ম্যাপিং (বিভাগ ও জেলা)
 # =====================================================
 
 BANGLA_MAP = {
-    # বিভাগসমূহ
+    # বিভাগসমূহ (সব ধরনের ইংরেজি বানান সহ)
     "rangpur": "রংপুর",
     "rajshahi": "রাজশাহী",
     "khulna": "খুলনা",
-    "barishal": "বরিশাল",
+    "barishal": "বরিশাল", "barisal": "বরিশাল",
     "dhaka": "ঢাকা",
     "mymensingh": "ময়মনসিংহ",
     "sylhet": "সিলেট",
-    "chattogram": "চট্টগ্রাম",
+    "chattogram": "চট্টগ্রাম", "chittagong": "চট্টগ্রাম",
 
-    # জেলাসমূহ
+    # ৬৪ টি জেলা
     "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
     "nilphamari": "নীলফামারী", "lalmonirhat": "লালমনিরহাট", "kurigram": "কুড়িগ্রাম",
-    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া",
-    "chapainawabganj": "চাঁপাইনবাবগঞ্জ", "naogaon": "নওগাঁ", "natore": "নাটোর",
-    "sirajganj": "সিরাজগঞ্জ", "pabna": "পাবনা", "meherpur": "মেহেরপুর",
+    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া", "bogra": "বগুড়া",
+    "chapainawabganj": "চাঁপাইনবাবগঞ্জ", "nawabganj": "চাঁপাইনবাবগঞ্জ", "naogaon": "নওগাঁ",
+    "natore": "নাটোর", "sirajganj": "সিরাজগঞ্জ", "pabna": "পাবনা", "meherpur": "মেহেরপুর",
     "kushtia": "কুষ্টিয়া", "chuadanga": "চুয়াডাঙ্গা", "jhenaidah": "ঝিনাইদহ",
-    "jashore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
+    "jashore": "যশোর", "jessore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
     "bagerhat": "বাগেরহাট", "satkhira": "সাতক্ষীরা", "barguna": "বরগুনা",
-    "patuakhali": "পটুয়াখালী", "bhola": "ভোলা", "jhalokati": "ঝালকাঠি",
+    "patuakhali": "পটুয়াখালী", "bhola": "ভোলা", "jhalokati": "ঝালকাঠি", "jhalakati": "ঝালকাঠি",
     "pirojpur": "পিরোজপুর", "tangail": "টাঙ্গাইল", "kishoreganj": "কিশোরগঞ্জ",
     "manikganj": "মানিকগঞ্জ", "munshiganj": "মুন্সীগঞ্জ", "gazipur": "গাজীপুর",
     "narsingdi": "নরসিংদী", "narayanganj": "নারায়ণগঞ্জ", "rajbari": "রাজবাড়ী",
     "faridpur": "ফরিদপুর", "gopalganj": "গোপালগঞ্জ", "madaripur": "মাদারীপুর",
     "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
     "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
-    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
+    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা", "comilla": "কুমিল্লা",
     "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
-    "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
-    "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
+    "lakshmipur": "লক্ষ্মীপুর", "laxmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার",
+    "khagrachhari": "খাগড়াছড়ি", "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
 }
 
 
@@ -82,7 +82,6 @@ def auto_load_csv_files():
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    # .zip এবং .csv উভয় ফাইলই স্ক্যান করবে
     data_files = [f for f in os.listdir(".") if f.startswith("voters_") and (f.endswith(".zip") or f.endswith(".csv"))]
 
     for index, file_name in enumerate(sorted(data_files), start=1):
@@ -91,13 +90,17 @@ def auto_load_csv_files():
         raw_name = file_name.replace("voters_", "").replace(".zip", "").replace(".csv", "")
         parts = raw_name.split("_")
 
-        division_raw = parts[0].lower() if len(parts) > 0 else "other"
-        district_raw = parts[1].lower() if len(parts) > 1 else "general"
-        seat_raw = parts[2] if len(parts) > 2 else f"{index}"
+        division_raw = parts[0].lower().strip() if len(parts) > 0 else "other"
+        district_raw = parts[1].lower().strip() if len(parts) > 1 else "general"
+        seat_raw = parts[2].lower().strip() if len(parts) > 2 else f"{index}"
 
+        # ইংরেজি নাম থেকে বাংলায় কনভার্ট
         division = BANGLA_MAP.get(division_raw, division_raw.capitalize())
         district = BANGLA_MAP.get(district_raw, district_raw.capitalize())
-        seat_name = f"{district}-{seat_raw.replace('seat', '')}"
+        
+        # আসন ফরম্যাট
+        clean_seat_num = seat_raw.replace('seat', '')
+        seat_name = f"{district}-{clean_seat_num}"
 
         SEAT_FILES[seat_key] = {
             "name": seat_name,
@@ -134,7 +137,7 @@ def run_web_server():
 
 
 # =====================================================
-# 5. Helper & Fast Search Function (ZIP Support Included)
+# 5. Helper & Fast Search Function
 # =====================================================
 
 def normalize(text):
@@ -155,25 +158,22 @@ def search_csv(file_path, search_input, search_type):
     }
 
     try:
-        # ZIP ফাইল হ্যান্ডলিং
         if file_path.endswith(".zip"):
             with zipfile.ZipFile(file_path, 'r') as z:
                 csv_files_in_zip = [f for f in z.namelist() if f.endswith('.csv')]
                 if not csv_files_in_zip:
                     return []
-                # ZIP-এর ভেতরের প্রথম CSV ফাইলটি রিড করবে
                 with z.open(csv_files_in_zip[0]) as f:
                     content = io.TextIOWrapper(f, encoding="utf-8-sig", errors="replace")
                     reader = csv.DictReader(content)
                     results = process_rows(reader, search_input, search_type, column_mappings)
         else:
-            # নরমাল CSV ফাইল হ্যান্ডলিং
             with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
                 reader = csv.DictReader(file)
                 results = process_rows(reader, search_input, search_type, column_mappings)
 
     except Exception as e:
-        print("CSV/ZIP Search Error:", e)
+        print("Search Error:", e)
 
     return results
 
@@ -243,11 +243,11 @@ def get_value(row, names):
             value = str(value).strip()
             if value:
                 return value
-    return "N/A"
+    return ""
 
 
 def calculate_age(dob_str):
-    if not dob_str or dob_str == "N/A":
+    if not dob_str:
         return ""
     try:
         clean_dob = dob_str.replace(".", "/").replace("-", "/")
@@ -277,11 +277,12 @@ def make_report(row, seat_name, division, district):
     area_code = get_value(row, ["code", "areacode", "আসনকোড", "কোড"])
     raw_age = get_value(row, ["age", "বয়স"])
 
-    if raw_age != "N/A" and raw_age != "":
+    if raw_age:
         age_str = f" · {raw_age} বছর" if "বছর" not in raw_age else f" · {raw_age}"
     else:
         age_str = calculate_age(dob)
 
+    # আপনার হুবহু কম্প্যাক্ট ফরম্যাট
     return f"""🪪 {name}
 ────────────────────
 🔢 NID  {voter_no}
@@ -556,9 +557,4 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 continue
 
-            key = key.strip().lower()
-            val = val.strip()
-
-            if key in ["নাম", "name"]:
-                parsed["name"] = val
-            elif key in ["পিতা", "পিত
+          
