@@ -562,7 +562,7 @@ async def send_page(query, context):
     if end_index < len(results):
         keyboard.append([InlineKeyboardButton("➡️ আরো দেখুন", callback_data="next_page")])
 
-    keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু (সার্চ ফিল্টার)", callback_data="new_search")])
+    keyboard.append([InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")])
     keyboard.append([InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")])
 
     await query.message.reply_text(
@@ -673,7 +673,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if info["type"] == "dob":
             text = (
                 "✅ 🎂 Demo জন্মতারিখ দিয়ে সার্চ নির্বাচন করা হয়েছে।\n\n"
-                "✏️ এখন জন্মতারিখ লিখে পাঠান。\n\n"
+                "✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n"
                 "📌 উদাহরণ: 01/01/2000"
             )
         else:
@@ -686,7 +686,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================================================
-# 16. Search Handler (সংশোধিত নেভিগেশন বাটন সহ)
+# 16. Search Handler
 # =====================================================
 
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -776,7 +776,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not results:
         keyboard = [
-            [InlineKeyboardButton("🔙 পূর্বের মেনু (সার্চ ফিল্টার)", callback_data="new_search")],
+            [InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")],
             [InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")]
         ]
 
@@ -805,13 +805,13 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(results) > 10:
         keyboard.append([InlineKeyboardButton("➡️ আরো দেখুন", callback_data="next_page")])
 
-    keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু (সার্চ ফিল্টার)", callback_data="new_search")])
+    keyboard.append([InlineKeyboardButton("🔎 নতুন সার্চ (পূর্বের মেনু)", callback_data="new_search")])
     keyboard.append([InlineKeyboardButton("🏠 মূল মেনু (Start)", callback_data="show_division")])
 
-    await query_or_message_text = f"📄 মোট ফলাফল: {len(results)} টি\n\n📑 প্রথম {min(10, len(results))} টি রিপোর্ট দেখানো হয়েছে।"
+    summary_text = f"📄 মোট ফলাফল: {len(results)} টি\n\n📑 প্রথম {min(10, len(results))} টি রিপোর্ট দেখানো হয়েছে।"
 
     await update.message.reply_text(
-        query_or_message_text,
+        summary_text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -839,7 +839,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
 
-    print("🤖 Telegram Demo Search Bot চালু হয়েছে!")
+    print("🤖 Telegram Demo Search Bot चालू হয়েছে!")
 
     app.run_polling()
 
@@ -849,5 +849,4 @@ def main():
 # =====================================================
 
 if __name__ == "__main__":
-
     main()
