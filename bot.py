@@ -19,10 +19,10 @@ from telegram.ext import (
 )
 
 # =====================================================
-# 1. Telegram Bot Token
+# 1. Telegram Bot Token (আপডেটেড টোকেন)
 # =====================================================
 
-TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
+TOKEN = "8962830903:AAHb6q9WECK6QWNMyAiFNsQLd7WF3CJqKp4"
 
 
 # =====================================================
@@ -854,19 +854,17 @@ async def show_search_menu(query_or_message, context):
     )
 
 
-# 🌟 নতুন যুক্ত করা /start ফাংশন (যেখানে বট চালু হলেই কিবোর্ড নিচে যুক্ত হবে)
+# 🌟 ঠিক করা /start ফাংশন (persistent=True এরর সরানো হয়েছে)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   context.user_data.clear()
   auto_load_csv_files()
 
-  # 📌 আপনার দেওয়া ছবির মতো কাস্টম নিচের কিবোর্ড বাটনগুলো তৈরি করা হলো
   keyboard_buttons = [
       ["🔍 নতুন সার্চ", "📁 ফিল্টার"],
       ["📊 স্ট্যাটাস", "🏠 মেনু", "❌ রিসেট"],
   ]
-  reply_keyboard = ReplyKeyboardMarkup(
-      keyboard_buttons, resize_keyboard=True, persistent=True
-  )
+  # 🔧 persistent=True সরানো হয়েছে যাতে TypeError না হয়
+  reply_keyboard = ReplyKeyboardMarkup(keyboard_buttons, resize_keyboard=True)
 
   await update.message.reply_text(
       "🤖 **Demo Search Bot-এ স্বাগতম!**", reply_markup=reply_keyboard
@@ -1027,7 +1025,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_edit_message(query, text)
 
 
-# 🌟 নতুন যুক্ত করা কাস্টম বাটন হ্যান্ডলার (নিচের বাটনে ক্লিক করলে যা ঘটবে)
+# 🌟 বটম কাস্টম কিবোর্ড হ্যান্ডলার
 async def bottom_keyboard_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
@@ -1063,7 +1061,6 @@ async def bottom_keyboard_handler(
     await update.message.reply_text(status_text, parse_mode="Markdown")
 
   else:
-    # যদি বাটন ছাড়া সাধারণ সার্চের টেক্সট পাঠায় তবে সার্চ হ্যান্ডলারে রিডাইরেক্ট করবে
     await search_handler(update, context)
 
 
@@ -1226,8 +1223,6 @@ def main():
 
   app.add_handler(CommandHandler("start", start))
   app.add_handler(CallbackQueryHandler(button_handler))
-
-  # 🌟 নতুন কিবোর্ডের জন্য হ্যান্ডলার ফিল্টার যুক্ত করা হলো
   app.add_handler(
       MessageHandler(filters.TEXT & ~filters.COMMAND, bottom_keyboard_handler)
   )
