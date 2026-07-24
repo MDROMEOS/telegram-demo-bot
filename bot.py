@@ -1,9 +1,9 @@
 import os
-import sqlite3
-import threading
-import re
+import csv
 import zipfile
-import gdown
+import threading
+import io
+import re
 
 from flask import Flask
 
@@ -25,97 +25,110 @@ from telegram.error import BadRequest
 
 
 # =====================================================
-# 1. Google Drive থেকে অটো-ডাউনলোড সেকশন
+# 1. Telegram Bot Token
 # =====================================================
 
-DRIVE_FILES = [
-    {"id": "1CfbqdJP_T7XPG0-Va0J3eLZLma6qFohQ", "filename": "file1.zip"},
-    {"id": "1KBPfUexBd5zBqcrrgSRXfb6DED5ExVqM", "filename": "file2.zip"}
-]
-
-def download_drive_files():
-    for item in DRIVE_FILES:
-        file_id = item["id"]
-        output_name = item["filename"]
-        
-        if not os.path.exists(output_name):
-            print(f"⏳ Google Drive থেকে {output_name} ডাউনলোড হচ্ছে...")
-            url = f"https://drive.google.com/uc?id={file_id}"
-            gdown.download(url, output_name, quiet=False)
-            
-            if output_name.endswith(".zip") and os.path.exists(output_name):
-                print(f"📦 {output_name} আনজিপ করা হচ্ছে...")
-                try:
-                    with zipfile.ZipFile(output_name, 'r') as zip_ref:
-                        zip_ref.extractall(".")
-                    print(f"✅ {output_name} সফলভাবে এক্সট্র্যাক্ট হয়েছে!")
-                except Exception as e:
-                    print(f"⚠️ Extraction error: {e}")
-
-# অ্যাপ চালুর আগে ফাইল নিশ্চিত ডাউনলোড করবে
-download_drive_files()
+TOKEN = "8757771538:AAFt6VmtbOkFJ_0QSxpAWW8cVX8VwTUfC_E"
 
 
 # =====================================================
-# 2. Telegram Bot Token & DB Connection
+# 2. ইংরেজি ফাইল নেম থেকে বাংলা নাম ম্যাপিং
 # =====================================================
 
-TOKEN = "8908728538:AAEMB6huV4-n-LpmcW8KXaYmKU5c0zKxiHM"
-DB_NAME = "database.db"
+BANGLA_MAP = {
+    # বিভাগসমূহ
+    "rangpur": "রংপুর বিভাগ",
+    "rajshahi": "রাজশাহী বিভাগ",
+    "khulna": "খুলনা বিভাগ",
+    "barishal": "বরিশাল বিভাগ",
+    "dhaka": "ঢাকা বিভাগ",
+    "mymensingh": "ময়মনসিংহ বিভাগ",
+    "sylhet": "সিলেট বিভাগ",
+    "chattogram": "চট্টগ্রাম বিভাগ",
+
+    # জেলাসমূহ
+    "panchagarh": "পঞ্চগড়", "thakurgaon": "ঠাকুরগাঁও", "dinajpur": "দিনাজপুর",
+    "nilphamari": "নীলফামারী", "lalmonirhat": "লালমনিরহাট", "kurigram": "কুড়িগ্রাম",
+    "gaibandha": "গাইবান্ধা", "joypurhat": "জয়পুরহাট", "bogura": "বগুড়া",
+    "chapainawabganj": "চাঁপাইনবাবগঞ্জ", "naogaon": "নওগাঁ", "natore": "নাটোর",
+    "sirajganj": "সিরাজগঞ্জ", "pabna": "পাবনা", "meherpur": "মেহেরপুর",
+    "kushtia": "কুষ্টিয়া", "chuadanga": "চুয়াডাঙ্গা", "jhenaidah": "ঝিনাইদহ",
+    "jashore": "যশোর", "magura": "মাগুরা", "narail": "নড়াইল",
+    "bagerhat": "বাগেরহাট", "satkhira": "সাতক্ষীরা", "barguna": "বরগুনা",
+    "patuakhali": "পটুয়াখালী", "bhola": "ভোলা", "jhalokati": "ঝালকাঠি",
+    "pirojpur": "পিরোজপুর", "tangail": "টাঙ্গাইল", "kishoreganj": "কিশোরগঞ্জ",
+    "manikganj": "মানিকগঞ্জ", "munshiganj": "মুন্সীগঞ্জ", "gazipur": "গাজীপুর",
+    "narsingdi": "নরসিংদী", "narayanganj": "নারায়ণগঞ্জ", "rajbari": "রাজবাড়ী",
+    "faridpur": "ফরিদপুর", "gopalganj": "গোপালগঞ্জ", "madaripur": "মাদারীপুর",
+    "shariatpur": "শরীয়তপুর", "jamalpur": "জামালপুর", "sherpur": "শেরপুর",
+    "netrokona": "নেত্রকোণা", "sunamganj": "সুনামগঞ্জ", "moulvibazar": "মৌলভীবাজার",
+    "habiganj": "হবিগঞ্জ", "brahmanbaria": "ব্রাহ্মণবাড়িয়া", "cumilla": "কুমিল্লা",
+    "chandpur": "চাঁদপুর", "feni": "ফেনী", "noakhali": "নোয়াখালী",
+    "lakshmipur": "লক্ষ্মীপুর", "coxsbazar": "কক্সবাজার", "khagrachhari": "খাগড়াছড়ি",
+    "rangamati": "রাঙ্গামাটি", "bandarban": "বান্দরবান"
+}
 
 
 # =====================================================
-# 3. অটোমেটিক ডাটাবেজ ও মেনু লোডার
+# 3. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (ZIP Only)
 # =====================================================
 
 SEAT_FILES = {}
 DIVISIONS_MAP = {}
 
-def load_menu_from_db():
+def auto_load_zip_files():
     global SEAT_FILES, DIVISIONS_MAP
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    if not os.path.exists(DB_NAME):
-        print("❌ database.db পাওয়া যায়নি!")
-        return
+    zip_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".zip")]
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    for index, zip_name in enumerate(sorted(zip_files), start=1):
+        seat_key = f"auto_seat_{index}"
+        
+        raw_name = zip_name.replace("voters_", "").replace(".zip", "")
+        parts = raw_name.split("_")
 
-    cursor.execute("SELECT DISTINCT seat_key, division, district, seat_name FROM voters")
-    rows = cursor.fetchall()
+        division_raw = parts[0].lower() if len(parts) > 0 else "other"
+        district_raw = parts[1].lower() if len(parts) > 1 else "general"
+        seat_raw = parts[2] if len(parts) > 2 else f"{index}"
 
-    for seat_key, division, district, seat_name in rows:
+        division = BANGLA_MAP.get(division_raw, division_raw.capitalize())
+        district = BANGLA_MAP.get(district_raw, district_raw.capitalize())
+        seat_name = f"আসন-{seat_raw.replace('seat', '')}"
+
         SEAT_FILES[seat_key] = {
             "name": seat_name,
             "division": division,
-            "district": district
+            "district": district,
+            "zip": zip_name,
         }
 
         if division not in DIVISIONS_MAP:
             DIVISIONS_MAP[division] = {}
         if district not in DIVISIONS_MAP[division]:
             DIVISIONS_MAP[division][district] = []
+            
+        DIVISIONS_MAP[division][district].append(seat_key)
 
-        if seat_key not in DIVISIONS_MAP[division][district]:
-            DIVISIONS_MAP[division][district].append(seat_key)
+    print(f"✅ মোট {len(SEAT_FILES)} টি ZIP ফাইল লোড হয়েছে!")
 
-    conn.close()
-    print(f"✅ ডাটাবেজ থেকে {len(SEAT_FILES)} টি আসন লোড হয়েছে!")
-
-load_menu_from_db()
+auto_load_zip_files()
 
 
 # =====================================================
-# 4. Web Server (Render Port Binding)
+# 4. Flask Web Server
 # =====================================================
 
 web_app = Flask(__name__)
 
 @web_app.route("/")
 def home():
-    return "Bot is running perfectly!"
+    return "Telegram Demo Search Bot is running!"
+
+@web_app.route("/health")
+def health():
+    return "OK"
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -123,104 +136,171 @@ def run_web_server():
 
 
 # =====================================================
-# 5. SQLite Search Function
+# 5. Column Name Normalize
 # =====================================================
 
-def search_database(seat_key, search_input, search_type):
-    if not os.path.exists(DB_NAME):
+def normalize(text):
+    return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+# =====================================================
+# 6. ZIP ফাইল থেকে CSV সার্চ
+# =====================================================
+
+def search_zip(zip_path, search_input, search_type):
+    if not os.path.exists(zip_path):
         return []
 
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
     results = []
+    column_mappings = {
+        "demo_id": ["voter_no", "voterno", "demo_id", "demoid", "id"],
+        "name": ["name", "fullname", "নাম"],
+        "father": ["father", "fathername", "পিতা"],
+        "mother": ["mother", "mothername", "মাতা"],
+        "dob": ["dob", "dateofbirth", "birthdate", "জন্ম"]
+    }
 
     try:
-        if search_type == "multi":
-            query = "SELECT * FROM voters WHERE seat_key = ?"
-            params = [seat_key]
+        with zipfile.ZipFile(zip_path, "r") as z:
+            all_files = z.namelist()
+            csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
 
-            for field, search_val in search_input.items():
-                if search_val:
-                    if field in ["name", "father", "mother", "address", "area", "upazila"]:
-                        query += f" AND {field} LIKE ?"
-                        params.append(f"%{search_val}%")
-                    elif field in ["voter_no", "dob"]:
-                        s_val = search_val.replace("-", "/").replace(".", "/")
-                        query += f" AND ({field} LIKE ? OR REPLACE(REPLACE({field}, '-', '/'), '.', '/') LIKE ?)"
-                        params.append(f"%{search_val}%")
-                        params.append(f"%{s_val}%")
+            if not csv_file_name:
+                return []
 
-            cursor.execute(query, params)
-            results = [dict(row) for row in cursor.fetchall()]
+            with z.open(csv_file_name) as file:
+                text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
+                reader = csv.DictReader(text_file)
 
-        else:
-            col_map = {
-                "demo_id": "voter_no",
-                "name": "name",
-                "father": "father",
-                "mother": "mother",
-                "dob": "dob"
-            }
-            col = col_map.get(search_type, "name")
+                for row in reader:
+                    normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
 
-            if search_type == "dob":
-                s_val = str(search_input).replace("-", "/").replace(".", "/")
-                query = f"SELECT * FROM voters WHERE seat_key = ? AND ({col} LIKE ? OR REPLACE(REPLACE({col}, '-', '/'), '.', '/') LIKE ?)"
-                cursor.execute(query, [seat_key, f"%{search_input}%", f"%{s_val}%"])
-            else:
-                query = f"SELECT * FROM voters WHERE seat_key = ? AND {col} LIKE ?"
-                cursor.execute(query, [seat_key, f"%{search_input}%"])
+                    if search_type == "multi":
+                        is_match = True
+                        for field, search_val in search_input.items():
+                            if not search_val:
+                                continue
 
-            results = [dict(row) for row in cursor.fetchall()]
+                            possible_cols = column_mappings.get(field, [])
+                            found_value = ""
+
+                            for col in possible_cols:
+                                norm_col = normalize(col)
+                                if norm_col in normalized_row:
+                                    found_value = normalized_row[norm_col]
+                                    break
+
+                            s_val = str(search_val).strip().lower()
+                            f_val = str(found_value).strip().lower()
+
+                            if field == "dob":
+                                s_val = s_val.replace("-", "/").replace(".", "/")
+                                f_val = f_val.replace("-", "/").replace(".", "/")
+
+                            if s_val not in f_val:
+                                is_match = False
+                                break
+
+                        if is_match:
+                            results.append(dict(row))
+
+                    else:
+                        search_columns = column_mappings.get(search_type, [])
+                        found_value = ""
+
+                        for column in search_columns:
+                            column_name = normalize(column)
+                            if column_name in normalized_row:
+                                found_value = normalized_row[column_name]
+                                break
+
+                        search_value = str(search_input).strip().lower()
+                        found_value_normalized = str(found_value).strip().lower()
+
+                        if search_type == "dob":
+                            search_value = search_value.replace("-", "/").replace(".", "/")
+                            found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+
+                        if search_value in found_value_normalized:
+                            results.append(dict(row))
 
     except Exception as e:
-        print("DB Search Error:", e)
-    finally:
-        conn.close()
+        print("Zip Search Error:", e)
 
     return results
 
 
-def make_report(row):
+# =====================================================
+# 7. CSV থেকে Value নেওয়া
+# =====================================================
+
+def get_value(row, names):
+    normalized_row = {normalize(k): v for k, v in row.items()}
+    for name in names:
+        value = normalized_row.get(normalize(name))
+        if value is not None:
+            value = str(value).strip()
+            if value:
+                return value
+    return "N/A"
+
+
+# =====================================================
+# 8. রিপোর্ট ফরম্যাটিং
+# =====================================================
+
+def make_report(row, seat_name, division, district):
+    voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id"])
+    serial = get_value(row, ["serial", "serialnumber", "সিরিয়াল"])
+    name = get_value(row, ["name", "fullname", "নাম"])
+    father = get_value(row, ["father", "fathername", "পিতা"])
+    mother = get_value(row, ["mother", "mothername", "মাতা"])
+    dob = get_value(row, ["dob", "dateofbirth", "birthdate", "জন্ম"])
+    gender = get_value(row, ["gender", "sex", "লিঙ্গ"])
+    occupation = get_value(row, ["occupation", "profession", "পেশা"])
+    address = get_value(row, ["address", "ঠিকানা"])
+    area = get_value(row, ["area", "এলাকা"])
+    upazila = get_value(row, ["upazila", "উপজেলা", "thana", "policestation", "থানা"])
+    post_code = get_value(row, ["zip", "zipcode", "postalcode", "postcode", "পোস্টকোড", "পোস্ট কোড"])
+
     return f"""🪪 Demo Voter Report
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🔢 Demo ID: {row.get('voter_no') or 'N/A'}
+🔢 Demo ID: {voter_no}
 
-🔖 সিরিয়াল: {row.get('serial') or 'N/A'}
+🔖 সিরিয়াল: {serial}
 
-👤 নাম: {row.get('name') or 'N/A'}
+👤 নাম: {name}
 
-👨 পিতা: {row.get('father') or 'N/A'}
+👨 পিতা: {father}
 
-👩 মাতা: {row.get('mother') or 'N/A'}
+👩 মাতা: {mother}
 
-🎂 জন্মতারিখ: {row.get('dob') or 'N/A'}
+🎂 জন্মতারিখ: {dob}
 
-⚧ লিঙ্গ: {row.get('gender') or 'N/A'}
+⚧ লিঙ্গ: {gender}
 
-💼 পেশা: {row.get('occupation') or 'N/A'}
+💼 পেশা: {occupation}
 
-🏠 ঠিকানা: {row.get('address') or 'N/A'}
+🏠 ঠিকানা: {address}
 
-📍 এলাকা: {row.get('area') or 'N/A'}
+📍 এলাকা: {area}
 
-📌 উপজেলা/থানা: {row.get('upazila') or 'N/A'}
+📌 উপজেলা/থানা: {upazila}
 
-📮 পোস্ট কোড: {row.get('post_code') or 'N/A'}
+📮 পোস্ট কোড: {post_code}
 
-🌍 বিভাগ: {row.get('division') or 'N/A'}
+🌍 বিভাগ: {division}
 
-🗺 জেলা: {row.get('district') or 'N/A'}
+🗺 জেলা: {district}
 
-🏛 আসন: {row.get('seat_name') or 'N/A'}
+🏛 আসন: {seat_name}
 
 ━━━━━━━━━━━━━━━━━━━━"""
 
 
+# Helper for Safe Edit Message
 async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
     try:
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode=parse_mode)
@@ -232,7 +312,7 @@ async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
 
 
 # =====================================================
-# 6. Menus & Handlers (পূর্বের বিভাগ/জেলা/আসন সিস্টেম)
+# 9. ডাইনামিক মেনু ফাংশনসমূহ
 # =====================================================
 
 async def show_division_menu(query_or_message):
@@ -240,7 +320,7 @@ async def show_division_menu(query_or_message):
     divisions = list(DIVISIONS_MAP.keys())
 
     if not divisions:
-        text = "⚠️ কোনো ডাটা পাওয়া যায়নি! গুগল ড্রাইভের ZIP ফাইলে database.db বা সঠিক CSV ফাইলগুলো সংসংযুক্ত আছে কিনা চেক করুন।"
+        text = "⚠️ কোনো voters_*.zip ফাইল পাওয়া যায়নি!"
         if hasattr(query_or_message, 'edit_message_text'):
             await safe_edit_message(query_or_message, text)
         else:
@@ -292,11 +372,11 @@ async def show_seat_menu(query, context):
     for i in range(0, len(seat_keys), 2):
         seat_1 = SEAT_FILES[seat_keys[i]]
         row = [InlineKeyboardButton(f"🏛 {seat_1['name']}", callback_data=seat_keys[i])]
-
+        
         if i + 1 < len(seat_keys):
             seat_2 = SEAT_FILES[seat_keys[i+1]]
             row.append(InlineKeyboardButton(f"🏛 {seat_2['name']}", callback_data=seat_keys[i+1]))
-
+            
         keyboard.append(row)
 
     keyboard.append([InlineKeyboardButton("🔙 পূর্বের মেনু", callback_data="back_district")])
@@ -333,15 +413,21 @@ async def show_search_menu(query_or_message, context):
         await query_or_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+# =====================================================
+# 10. Handlers
+# =====================================================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    load_menu_from_db()
+    auto_load_zip_files()
     await show_division_menu(update.message)
 
 
 async def send_page(query, context):
     results = context.user_data.get("results", [])
     page = context.user_data.get("page", 0)
+    seat = context.user_data.get("seat")
+    info = SEAT_FILES.get(seat, {})
 
     per_page = 10
     start_index = page * per_page
@@ -349,7 +435,7 @@ async def send_page(query, context):
     page_results = results[start_index:end_index]
 
     for row in page_results:
-        report = make_report(row)
+        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
         await query.message.reply_text(report)
 
     keyboard = []
@@ -462,6 +548,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_text = update.message.text.strip()
     search_type = context.user_data["search_type"]
     seat = context.user_data["seat"]
+    info = SEAT_FILES.get(seat, {})
 
     search_input = None
 
@@ -515,7 +602,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
 
-    results = search_database(seat, search_input, search_type)
+    results = search_zip(info["zip"], search_input, search_type)
 
     if not results:
         keyboard = [
@@ -531,7 +618,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_results = results[:10]
 
     for row in first_results:
-        report = make_report(row)
+        report = make_report(row, info.get("name", "N/A"), info.get("division", "N/A"), info.get("district", "N/A"))
         await update.message.reply_text(report)
 
     keyboard = []
@@ -546,7 +633,7 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================================================
-# 7. Main Function
+# 11. Main Function
 # =====================================================
 
 def main():
