@@ -1,6 +1,5 @@
 import os
 import csv
-import zipfile
 import threading
 import io
 import re
@@ -28,11 +27,10 @@ from telegram.error import BadRequest
 # 1. Telegram Bot Token
 # =====================================================
 
-TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg"
-
+TOKEN = "8757771538:AAF9jRDqSf044igszowCgAFq7ceaqbgNxQg
 
 # =====================================================
-# 2. ইংরেজি ফাইল নেম থেকে বাংলা নাম ম্যাপিং
+# 2. বাংলা ম্যাপিং
 # =====================================================
 
 BANGLA_MAP = {
@@ -70,23 +68,24 @@ BANGLA_MAP = {
 
 
 # =====================================================
-# 3. অটোমেটিক ফাইল স্ক্যানার ও ডিটেক্টর (ZIP Only)
+# 3. অটোমেটিক ফাইল স্ক্যানার (Direct CSV Reader)
 # =====================================================
 
 SEAT_FILES = {}
 DIVISIONS_MAP = {}
 
-def auto_load_zip_files():
+def auto_load_csv_files():
     global SEAT_FILES, DIVISIONS_MAP
     SEAT_FILES.clear()
     DIVISIONS_MAP.clear()
 
-    zip_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".zip")]
+    # .csv ফাইল সরাসরি স্ক্যান করবে
+    csv_files = [f for f in os.listdir(".") if f.startswith("voters_") and f.endswith(".csv")]
 
-    for index, zip_name in enumerate(sorted(zip_files), start=1):
+    for index, csv_name in enumerate(sorted(csv_files), start=1):
         seat_key = f"auto_seat_{index}"
         
-        raw_name = zip_name.replace("voters_", "").replace(".zip", "")
+        raw_name = csv_name.replace("voters_", "").replace(".csv", "")
         parts = raw_name.split("_")
 
         division_raw = parts[0].lower() if len(parts) > 0 else "other"
@@ -101,7 +100,7 @@ def auto_load_zip_files():
             "name": seat_name,
             "division": division,
             "district": district,
-            "zip": zip_name,
+            "file": csv_name,
         }
 
         if division not in DIVISIONS_MAP:
@@ -111,24 +110,20 @@ def auto_load_zip_files():
             
         DIVISIONS_MAP[division][district].append(seat_key)
 
-    print(f"✅ মোট {len(SEAT_FILES)} টি ZIP ফাইল লোড হয়েছে!")
+    print(f"✅ মোট {len(SEAT_FILES)} টি CSV ফাইল লোড হয়েছে!")
 
-auto_load_zip_files()
+auto_load_csv_files()
 
 
 # =====================================================
-# 4. Flask Web Server
+# 4. Web Server
 # =====================================================
 
 web_app = Flask(__name__)
 
 @web_app.route("/")
 def home():
-    return "Telegram Demo Search Bot is running!"
-
-@web_app.route("/health")
-def health():
-    return "OK"
+    return "Bot is running!"
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -136,19 +131,15 @@ def run_web_server():
 
 
 # =====================================================
-# 5. Column Name Normalize
+# 5. Helper & Fast Search Function
 # =====================================================
 
 def normalize(text):
     return str(text).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
-# =====================================================
-# 6. ZIP ফাইল থেকে CSV সার্চ
-# =====================================================
-
-def search_zip(zip_path, search_input, search_type):
-    if not os.path.exists(zip_path):
+def search_csv(file_path, search_input, search_type):
+    if not os.path.exists(file_path):
         return []
 
     results = []
@@ -161,78 +152,66 @@ def search_zip(zip_path, search_input, search_type):
     }
 
     try:
-        with zipfile.ZipFile(zip_path, "r") as z:
-            all_files = z.namelist()
-            csv_file_name = next((f for f in all_files if f.lower().endswith(".csv")), None)
+        with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as file:
+            reader = csv.DictReader(file)
 
-            if not csv_file_name:
-                return []
+            for row in reader:
+                normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
 
-            with z.open(csv_file_name) as file:
-                text_file = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace", newline="")
-                reader = csv.DictReader(text_file)
+                if search_type == "multi":
+                    is_match = True
+                    for field, search_val in search_input.items():
+                        if not search_val:
+                            continue
 
-                for row in reader:
-                    normalized_row = {normalize(k): str(v or "") for k, v in row.items()}
-
-                    if search_type == "multi":
-                        is_match = True
-                        for field, search_val in search_input.items():
-                            if not search_val:
-                                continue
-
-                            possible_cols = column_mappings.get(field, [])
-                            found_value = ""
-
-                            for col in possible_cols:
-                                norm_col = normalize(col)
-                                if norm_col in normalized_row:
-                                    found_value = normalized_row[norm_col]
-                                    break
-
-                            s_val = str(search_val).strip().lower()
-                            f_val = str(found_value).strip().lower()
-
-                            if field == "dob":
-                                s_val = s_val.replace("-", "/").replace(".", "/")
-                                f_val = f_val.replace("-", "/").replace(".", "/")
-
-                            if s_val not in f_val:
-                                is_match = False
-                                break
-
-                        if is_match:
-                            results.append(dict(row))
-
-                    else:
-                        search_columns = column_mappings.get(search_type, [])
+                        possible_cols = column_mappings.get(field, [])
                         found_value = ""
 
-                        for column in search_columns:
-                            column_name = normalize(column)
-                            if column_name in normalized_row:
-                                found_value = normalized_row[column_name]
+                        for col in possible_cols:
+                            norm_col = normalize(col)
+                            if norm_col in normalized_row:
+                                found_value = normalized_row[norm_col]
                                 break
 
-                        search_value = str(search_input).strip().lower()
-                        found_value_normalized = str(found_value).strip().lower()
+                        s_val = str(search_val).strip().lower()
+                        f_val = str(found_value).strip().lower()
 
-                        if search_type == "dob":
-                            search_value = search_value.replace("-", "/").replace(".", "/")
-                            found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+                        if field == "dob":
+                            s_val = s_val.replace("-", "/").replace(".", "/")
+                            f_val = f_val.replace("-", "/").replace(".", "/")
 
-                        if search_value in found_value_normalized:
-                            results.append(dict(row))
+                        if s_val not in f_val:
+                            is_match = False
+                            break
+
+                    if is_match:
+                        results.append(dict(row))
+
+                else:
+                    search_columns = column_mappings.get(search_type, [])
+                    found_value = ""
+
+                    for column in search_columns:
+                        column_name = normalize(column)
+                        if column_name in normalized_row:
+                            found_value = normalized_row[column_name]
+                            break
+
+                    search_value = str(search_input).strip().lower()
+                    found_value_normalized = str(found_value).strip().lower()
+
+                    if search_type == "dob":
+                        search_value = search_value.replace("-", "/").replace(".", "/")
+                        found_value_normalized = found_value_normalized.replace("-", "/").replace(".", "/")
+
+                    if search_value in found_value_normalized:
+                        results.append(dict(row))
 
     except Exception as e:
-        print("Zip Search Error:", e)
+        print("CSV Search Error:", e)
 
     return results
 
-
-# =====================================================
-# 7. CSV থেকে Value নেওয়া
-# =====================================================
 
 def get_value(row, names):
     normalized_row = {normalize(k): v for k, v in row.items()}
@@ -244,10 +223,6 @@ def get_value(row, names):
                 return value
     return "N/A"
 
-
-# =====================================================
-# 8. রিপোর্ট ফরম্যাটিং
-# =====================================================
 
 def make_report(row, seat_name, division, district):
     voter_no = get_value(row, ["voter_no", "voterno", "demo_id", "demoid", "id"])
@@ -300,7 +275,6 @@ def make_report(row, seat_name, division, district):
 ━━━━━━━━━━━━━━━━━━━━"""
 
 
-# Helper for Safe Edit Message
 async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
     try:
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode=parse_mode)
@@ -312,7 +286,7 @@ async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
 
 
 # =====================================================
-# 9. ডাইনামিক মেনু ফাংশনসমূহ
+# 6. Menus & Handlers
 # =====================================================
 
 async def show_division_menu(query_or_message):
@@ -320,7 +294,7 @@ async def show_division_menu(query_or_message):
     divisions = list(DIVISIONS_MAP.keys())
 
     if not divisions:
-        text = "⚠️ কোনো voters_*.zip ফাইল পাওয়া যায়নি!"
+        text = "⚠️ কোনো voters_*.csv ফাইল পাওয়া যায়নি!"
         if hasattr(query_or_message, 'edit_message_text'):
             await safe_edit_message(query_or_message, text)
         else:
@@ -413,13 +387,9 @@ async def show_search_menu(query_or_message, context):
         await query_or_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-# =====================================================
-# 10. Handlers
-# =====================================================
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    auto_load_zip_files()
+    auto_load_csv_files()
     await show_division_menu(update.message)
 
 
@@ -573,4 +543,35 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parsed["father"] = val
             elif key in ["মাতা", "মাতার নাম", "mother", "mothername"]:
                 parsed["mother"] = val
-            elif key in 
+            elif key in ["জন্ম", "জন্মতারিখ", "dob", "dateofbirth"]:
+                parsed["dob"] = val
+
+        non_empty = {k: v for k, v in parsed.items() if v}
+
+        if not non_empty:
+            if len(lines) == 1 and ":" not in raw_text and "：" not in raw_text:
+                parsed["name"] = raw_text
+                non_empty = {"name": raw_text}
+            else:
+                await update.message.reply_text("⚠️ সঠিক ফরম্যাটে তথ্য দিন।")
+                return
+
+        if len(non_empty) == 1:
+            single_key = list(non_empty.keys())[0]
+            search_type = single_key
+            search_input = non_empty[single_key]
+        else:
+            search_input = parsed
+
+    else:
+        search_input = raw_text
+        if search_type == "dob":
+            if not re.match(r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$", search_input):
+                await update.message.reply_text("⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন। (যেমন: 01/01/2000)")
+                return
+
+    await update.message.reply_text("🔍 Demo Data সার্চ করা হচ্ছে...\n\n⏳ একটু অপেক্ষা করুন।")
+
+    results = search_csv(info["file"], search_input, search_type)
+
+    if no
