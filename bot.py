@@ -637,12 +637,10 @@ def make_report(
 
 
 # =====================================================
-# 9. বিভাগ নির্বাচন
+# 9. বিভাগ নির্বাচন (সবগুলো বিভাগ একসাথে দেখাবে)
 # =====================================================
 
-async def show_division_menu(
-    query
-):
+async def show_division_menu(query_or_message):
 
     keyboard = [
 
@@ -673,19 +671,18 @@ async def show_division_menu(
     ]
 
 
-    await query.edit_message_text(
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        "🏠 Demo Search Bot\n\n"
+    text = "🏠 Demo Search Bot\n\n🌍 একটি বিভাগ নির্বাচন করুন:"
 
-        "🌍 প্রথমে একটি বিভাগ নির্বাচন করুন:",
 
-        reply_markup=InlineKeyboardMarkup(
+    if hasattr(query_or_message, 'edit_message_text'):
 
-            keyboard
+        await query_or_message.edit_message_text(text, reply_markup=reply_markup)
 
-        )
+    else:
 
-    )
+        await query_or_message.reply_text(text, reply_markup=reply_markup)
 
 
 # =====================================================
@@ -999,7 +996,7 @@ async def show_search_menu(
 
 
 # =====================================================
-# 13. /start
+# 13. /start (সরাসরি দুটি বিভাগ বাটন দেখাবে)
 # =====================================================
 
 async def start(
@@ -1012,37 +1009,7 @@ async def start(
 
     context.user_data.clear()
 
-
-    keyboard = [
-
-        [
-
-            InlineKeyboardButton(
-
-                "🌍 বিভাগ নির্বাচন",
-
-                callback_data="show_division"
-
-            )
-
-        ]
-
-    ]
-
-
-    await update.message.reply_text(
-
-        "🏠 Demo Search Bot\n\n"
-
-        "📍 শুরু করতে নিচের বাটনে ক্লিক করুন:",
-
-        reply_markup=InlineKeyboardMarkup(
-
-            keyboard
-
-        )
-
-    )
+    await show_division_menu(update.message)
 
 
 # =====================================================
@@ -1396,3 +1363,619 @@ async def button_handler(
         context.user_data.pop(
 
             "page",
+
+            None
+
+        )
+
+
+        context.user_data.pop(
+
+            "search_type",
+
+            None
+
+        )
+
+
+        await show_search_menu(
+
+            query,
+
+            context
+
+        )
+
+
+        return
+
+
+    if data == "next_page":
+
+        context.user_data[
+
+            "page"
+
+        ] = (
+
+            context.user_data.get(
+
+                "page",
+
+                0
+
+            )
+
+            + 1
+
+        )
+
+
+        await send_page(
+
+            query,
+
+            context
+
+        )
+
+
+        return
+
+
+    search_types = {
+
+        "search_demo_id": {
+
+            "type": "demo_id",
+
+            "title": "🆔 Demo ID"
+
+        },
+
+        "search_name": {
+
+            "type": "name",
+
+            "title": "👤 Demo নাম"
+
+        },
+
+        "search_father": {
+
+            "type": "father",
+
+            "title": "👨 Demo পিতার নাম"
+
+        },
+
+        "search_mother": {
+
+            "type": "mother",
+
+            "title": "👩 Demo মাতার নাম"
+
+        },
+
+        "search_dob": {
+
+            "type": "dob",
+
+            "title": "🎂 Demo জন্মতারিখ"
+
+        }
+
+    }
+
+
+    if data == "search_multi":
+
+        context.user_data["search_type"] = "multi"
+
+
+        text = (
+
+            "⚡ **Multi Search (AND Search)**\n\n"
+
+            "আপনি চাইলে নাম, পিতার নাম, মাতার নাম এবং জন্মতারিখ যেকোনো কম্বিনেশনে লিখে পাঠাতে পারেন।\n\n"
+
+            "📌 **ফরম্যাট:**\n"
+
+            "নাম: [আপনার নাম]\n"
+
+            "পিতা: [পিতার নাম]\n"
+
+            "মাতা: [মাতার নাম]\n"
+
+            "জন্ম: [01/01/2000]\n\n"
+
+            "💡 **উদাহরণ:**\n"
+
+            "নাম: রহিম\n"
+
+            "পিতা: করিম\n"
+
+            "জন্ম: 01/01/2000\n\n"
+
+            "*(যেকোনো ১টি বা একাধিক ফিল্ড একসাথে দিতে পারেন)*"
+
+        )
+
+
+        await query.edit_message_text(text, parse_mode="Markdown")
+
+        return
+
+
+    if data in search_types:
+
+        info = search_types[data]
+
+
+        context.user_data[
+
+            "search_type"
+
+        ] = info["type"]
+
+
+        if info["type"] == "dob":
+
+            text = (
+
+                "✅ 🎂 Demo জন্মতারিখ দিয়ে "
+
+                "সার্চ নির্বাচন করা হয়েছে।\n\n"
+
+                "✏️ এখন জন্মতারিখ লিখে পাঠান।\n\n"
+
+                "📌 উদাহরণ: 01/01/2000"
+
+            )
+
+
+        else:
+
+            text = (
+
+                f"✅ {info['title']} দিয়ে "
+
+                f"সার্চ নির্বাচন করা হয়েছে।\n\n"
+
+                f"✏️ এখন আপনার "
+
+                f"{info['title']} লিখে পাঠান।"
+
+            )
+
+
+        await query.edit_message_text(
+
+            text
+
+        )
+
+
+# =====================================================
+# 16. Search Handler
+# =====================================================
+
+async def search_handler(
+
+    update: Update,
+
+    context: ContextTypes.DEFAULT_TYPE
+
+):
+
+    if "seat" not in context.user_data:
+
+        await update.message.reply_text(
+
+            "⚠️ প্রথমে /start দিয়ে "
+
+            "বিভাগ, জেলা ও আসন নির্বাচন করুন।"
+
+        )
+
+        return
+
+
+    if "search_type" not in context.user_data:
+
+        await update.message.reply_text(
+
+            "⚠️ প্রথমে সার্চের ধরন নির্বাচন করুন।"
+
+        )
+
+        return
+
+
+    raw_text = update.message.text.strip()
+
+    search_type = context.user_data["search_type"]
+
+    seat = context.user_data["seat"]
+
+    info = SEAT_FILES.get(seat, SEAT_FILES["seat_1"])
+
+
+    search_input = None
+
+
+    if search_type == "multi":
+
+        parsed = {
+
+            "name": "",
+
+            "father": "",
+
+            "mother": "",
+
+            "dob": ""
+
+        }
+
+
+        lines = raw_text.split("\n")
+
+
+        for line in lines:
+
+            if ":" in line:
+
+                key, val = line.split(":", 1)
+
+            elif "：" in line:
+
+                key, val = line.split("：", 1)
+
+            else:
+
+                continue
+
+
+            key = key.strip().lower()
+
+            val = val.strip()
+
+
+            if key in ["নাম", "name"]:
+
+                parsed["name"] = val
+
+            elif key in ["পিতা", "পিতার নাম", "father", "fathername"]:
+
+                parsed["father"] = val
+
+            elif key in ["মাতা", "মাতার নাম", "mother", "mothername"]:
+
+                parsed["mother"] = val
+
+            elif key in ["জন্ম", "জন্মতারিখ", "dob", "dateofbirth"]:
+
+                parsed["dob"] = val
+
+
+        non_empty = {k: v for k, v in parsed.items() if v}
+
+
+        if not non_empty:
+
+            if len(lines) == 1 and ":" not in raw_text and "：" not in raw_text:
+
+                parsed["name"] = raw_text
+
+                non_empty = {"name": raw_text}
+
+            else:
+
+                await update.message.reply_text(
+
+                    "⚠️ সঠিক ফরম্যাটে তথ্য দিন।\n\n"
+
+                    "📌 **উদাহরণ:**\n"
+
+                    "নাম: রহিম\n"
+
+                    "পিতা: করিম\n"
+
+                    "মাতা: রেহানা\n"
+
+                    "জন্ম: 01/01/2000",
+
+                    parse_mode="Markdown"
+
+                )
+
+                return
+
+
+        if len(non_empty) == 1:
+
+            single_key = list(non_empty.keys())[0]
+
+            search_type = single_key
+
+            search_input = non_empty[single_key]
+
+        else:
+
+            search_input = parsed
+
+
+    else:
+
+        search_input = raw_text
+
+
+        if search_type == "dob":
+
+            if not re.match(
+
+                r"^\d{2}[\/\-\.]\d{2}[\/\-\.]\d{4}$",
+
+                search_input
+
+            ):
+
+                await update.message.reply_text(
+
+                    "⚠️ জন্মতারিখ সঠিক ফরম্যাটে লিখুন।\n\n"
+
+                    "📌 উদাহরণ: 01/01/2000"
+
+                )
+
+                return
+
+
+    await update.message.reply_text(
+
+        "🔍 Demo Data সার্চ করা হচ্ছে...\n\n"
+
+        "⏳ একটু অপেক্ষা করুন।"
+
+    )
+
+
+    results = search_zip(
+
+        info["zip"],
+
+        info["csv"],
+
+        search_input,
+
+        search_type
+
+    )
+
+
+    if not results:
+
+        keyboard = [
+
+            [
+
+                InlineKeyboardButton(
+
+                    "🔎 নতুন সার্চ",
+
+                    callback_data="new_search"
+
+                )
+
+            ]
+
+        ]
+
+
+        await update.message.reply_text(
+
+            "❌ কোনো Demo Data পাওয়া যায়নি।\n\n"
+
+            "🔎 অন্য তথ্য দিয়ে আবার চেষ্টা করুন।",
+
+            reply_markup=InlineKeyboardMarkup(
+
+                keyboard
+
+            )
+
+        )
+
+
+        return
+
+
+    context.user_data[
+
+        "results"
+
+    ] = results
+
+
+    context.user_data[
+
+        "page"
+
+    ] = 0
+
+
+    first_results = results[:10]
+
+
+    for row in first_results:
+
+        report = make_report(
+
+            row,
+
+            info["name"],
+
+            info["division"],
+
+            info["district"]
+
+        )
+
+
+        await update.message.reply_text(
+
+            report
+
+        )
+
+
+    keyboard = []
+
+
+    if len(results) > 10:
+
+        keyboard.append(
+
+            [
+
+                InlineKeyboardButton(
+
+                    "➡️ আরো দেখুন",
+
+                    callback_data="next_page"
+
+                )
+
+            ]
+
+        )
+
+
+    keyboard.append(
+
+        [
+
+            InlineKeyboardButton(
+
+                "🔎 নতুন সার্চ",
+
+                callback_data="new_search"
+
+            )
+
+        ]
+
+    )
+
+
+    await update.message.reply_text(
+
+        f"📄 মোট ফলাফল: {len(results)} টি\n\n"
+
+        f"📑 প্রথম "
+
+        f"{min(10, len(results))}"
+
+        f" টি রিপোর্ট দেখানো হয়েছে।",
+
+        reply_markup=InlineKeyboardMarkup(
+
+            keyboard
+
+        )
+
+    )
+
+
+# =====================================================
+# 17. Main
+# =====================================================
+
+def main():
+
+    threading.Thread(
+
+        target=run_web_server,
+
+        daemon=True
+
+    ).start()
+
+
+    print(
+
+        "🌐 Web Server चालू হয়েছে"
+
+    )
+
+
+    app = (
+
+        Application
+
+        .builder()
+
+        .token(TOKEN)
+
+        .build()
+
+    )
+
+
+    app.add_handler(
+
+        CommandHandler(
+
+            "start",
+
+            start
+
+        )
+
+    )
+
+
+    app.add_handler(
+
+        CallbackQueryHandler(
+
+            button_handler
+
+        )
+
+    )
+
+
+    app.add_handler(
+
+        MessageHandler(
+
+            filters.TEXT
+
+            & ~filters.COMMAND,
+
+            search_handler
+
+        )
+
+    )
+
+
+    print(
+
+        "🤖 Telegram Demo Search Bot চালু হয়েছে!"
+
+    )
+
+
+    app.run_polling()
+
+
+# =====================================================
+# 18. Start
+# =====================================================
+
+if __name__ == "__main__":
+
+    main()
